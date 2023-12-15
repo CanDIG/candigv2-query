@@ -40,6 +40,10 @@ COPY . /app/query_server
 
 WORKDIR /app/query_server
 
+RUN chown -R candig:candig /app/query_server
+
+USER candig
+
 RUN touch initial_setup
 
 ENTRYPOINT ["bash", "entrypoint.sh"]
