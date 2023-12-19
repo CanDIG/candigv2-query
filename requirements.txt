@@ -2,5 +2,5 @@ Flask==2.2.2
 Flask-Cors==3.0.10
 pytest==7.2.0
 connexion==2.14.1
-uwsgi==2.0.21
+uwsgi==2.0.23
 swagger-ui-bundle==0.0.9
