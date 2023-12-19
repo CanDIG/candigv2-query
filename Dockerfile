@@ -28,7 +28,6 @@ RUN apk add --no-cache \
 	curl \
 	curl-dev \
 	yaml-dev \
-	libressl-dev \
 	pcre-dev \
 	git \
 	sqlite
