@@ -226,8 +226,8 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             if gene != "":
                 htsget = query_htsget_gene(request.headers, gene)
             else:
-                search = re.search('(chr[XY0-9]{2}):(\d+)-(\d+)', chrom)
-                htsget = query_htsget_pos(request.headers, assembly, search.group(1), int(search.group(2)), int(search.group(3)))
+                search = re.search('(chr)*([XY0-9]{2}):(\d+)-(\d+)', chrom)
+                htsget = query_htsget_pos(request.headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
 
             # We need to be able to map specimens, so we'll grab it from Katsu
             specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=request.headers)
