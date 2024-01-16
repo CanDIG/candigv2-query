@@ -35,7 +35,7 @@ def safe_get_request_json(request, name):
     return request.json()
 
 # Grab a list of donors matching a given filter from the given URL
-def get_donors_from_katsu(url, param_name, parameter_list):
+def get_donors_from_katsu(url, param_name, parameter_list, headers):
     permissible_donors = set()
     for parameter in parameter_list:
         # TODO: Fix the page_size call here -- use a consume_all() query like in the frontend
@@ -43,7 +43,7 @@ def get_donors_from_katsu(url, param_name, parameter_list):
             param_name: parameter,
             'page_size': PAGE_SIZE
         }
-        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=request.headers)
+        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
         results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
     return permissible_donors
@@ -187,6 +187,12 @@ def fix_dicts(to_fix):
 
 @app.route('/query')
 def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
+    # Add a service token to the headers so that other services will know this is from the query service:
+    headers = {}
+    for k in request.headers.keys():
+        headers[k] = request.headers[k]
+    headers["X-Service-Token"] = config.SERVICE_TOKEN
+
     # NB: We're still doing table joins here, which is probably not where we want to do them
     # We're grabbing (and storing in memory) all the donor data in Katsu with the below request
 
@@ -197,7 +203,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         params['primary_site'] = ",".join(primary_site)
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
         # Reuse their bearer token
-        headers=request.headers), 'Katsu Donors')
+        headers=headers), 'Katsu Donors')
     donors = r['items']
 
     # Filter on excluded cohorts
@@ -215,7 +221,8 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             permissible_donors = get_donors_from_katsu(
                 url,
                 param_name,
-                this_filter
+                this_filter,
+                headers
             )
             donors = [donor for donor in donors if donor['submitter_donor_id'] in permissible_donors]
 
@@ -224,13 +231,13 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     if gene != "" or chrom != "":
         try:
             if gene != "":
-                htsget = query_htsget_gene(request.headers, gene)
+                htsget = query_htsget_gene(headers, gene)
             else:
                 search = re.search('(chr)*([XY0-9]{2}):(\d+)-(\d+)', chrom)
-                htsget = query_htsget_pos(request.headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
+                htsget = query_htsget_pos(headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
 
             # We need to be able to map specimens, so we'll grab it from Katsu
-            specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=request.headers)
+            specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=headers)
             specimen_query = safe_get_request_json(specimen_query_req, 'Katsu sample registrations')
             specimen_mapping = {}
             for specimen in specimen_query['results']:
@@ -270,7 +277,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             print(ex)
 
     # TODO: Cache the above list of donor IDs and summary statistics
-    summary_stats = get_summary_stats(donors, request.headers)
+    summary_stats = get_summary_stats(donors, headers)
 
     # Determine which part of the filtered donors to send back
     ret_donors = [donor['submitter_donor_id'] for donor in donors[(page*page_size):((page+1)*page_size)]]
@@ -282,7 +289,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             program_id_url = urllib.parse.quote(ret_programs[i])
             print('asdf')
             r = requests.get(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
-                headers=request.headers)
+                headers=headers)
             full_data['results'].append(safe_get_request_json(r, 'Katsu donor clinical data'))
     else:
         full_data = {'results': []}
