@@ -129,22 +129,23 @@ def get_summary_stats(donors, headers):
         'patients_per_cohort': patients_per_cohort
     }
 
-def query_htsget_gene(headers, gene):
-    payload = {
-        'query': {
-            'requestParameters': {
-                'gene_id': gene
+def query_htsget_gene(headers, gene_array):
+    for g in gene_array:
+        payload = {
+            'query': {
+                'requestParameters': {
+                    'gene_id': g
+                }
+            },
+            'meta': {
+                'apiVersion': 'v2'
             }
-        },
-        'meta': {
-            'apiVersion': 'v2'
         }
-    }
 
-    return safe_get_request_json(requests.post(
-        f"{config.HTSGET_URL}/beacon/v2/g_variants",
-        headers=headers,
-        json=payload), 'HTSGet Gene')
+        return safe_get_request_json(requests.post(
+            f"{config.HTSGET_URL}/beacon/v2/g_variants",
+            headers=headers,
+            json=payload), 'HTSGet Gene')
 
 def query_htsget_pos(headers, assembly, chrom, start=0, end=10000000):
     payload = {
