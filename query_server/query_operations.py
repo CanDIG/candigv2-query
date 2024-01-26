@@ -303,7 +303,7 @@ def genomic_completeness():
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
         # Reuse their bearer token
         headers=request.headers), 'Katsu sample registrations')
-    samples = r['results']
+    samples = r['items']
 
     retVal = {}
     for sample in samples:
