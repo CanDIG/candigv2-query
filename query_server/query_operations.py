@@ -292,7 +292,6 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         for i, donor_id in enumerate(ret_donors):
             donor_id_url = urllib.parse.quote(donor_id)
             program_id_url = urllib.parse.quote(ret_programs[i])
-            print('asdf')
             r = requests.get(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
                 headers=headers)
             full_data['results'].append(safe_get_request_json(r, 'Katsu donor clinical data'))
