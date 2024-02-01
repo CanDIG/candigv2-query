@@ -276,13 +276,13 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     ret_programs = [donor['program_id'] for donor in donors[(page*page_size):((page+1)*page_size)]]
     full_data = {'results' : []}
     if len(donors) > 0:
-        for i, donor_id in enumerate(ret_donors):
-            donor_id_url = urllib.parse.quote(donor_id)
-            program_id_url = urllib.parse.quote(ret_programs[i])
-            print('asdf')
-            r = requests.get(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
-                headers=request.headers)
-            full_data['results'].append(safe_get_request_json(r, 'Katsu donor clinical data'))
+        params = {
+            'page_size': page_size,
+            'donors': ','.join(ret_donors)
+        }
+        r = requests.get(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/?{urllib.parse.urlencode(params)}",
+            headers=request.headers)
+        full_data = safe_get_request_json(r, 'Katsu donor clinical data')
     else:
         full_data = {'results': []}
     full_data['genomic'] = genomic_query
@@ -327,4 +327,3 @@ def genomic_completeness():
                 retVal[program_id]['transcriptomes'] += 1
 
     return retVal, 200
-
