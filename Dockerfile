@@ -28,7 +28,6 @@ RUN apk add --no-cache \
 	curl \
 	curl-dev \
 	yaml-dev \
-	libressl-dev \
 	pcre-dev \
 	git \
 	sqlite
@@ -40,6 +39,10 @@ RUN pip install --no-cache-dir -r /app/query_server/requirements.txt
 COPY . /app/query_server
 
 WORKDIR /app/query_server
+
+RUN chown -R candig:candig /app/query_server
+
+USER candig
 
 RUN touch initial_setup
 

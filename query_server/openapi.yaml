@@ -37,11 +37,12 @@ paths:
                 - $ref: "#/components/parameters/geneParam"
                 - $ref: "#/components/parameters/assemblyParam"
                 - $ref: "#/components/parameters/pageSizeParam"
-                - $ref: "#/components/parameters/pageNumParam"
+                - $ref: "#/components/parameters/pageParam"
+                - $ref: "#/components/parameters/excludeCohortsParam"
             operationId: query_operations.query
             responses:
                 200:
-                    description: Retrieve info about the Query service
+                    description: Retrieved donor information
                     content:
                         application/json:
                             schema:
@@ -52,6 +53,21 @@ paths:
                     $ref: "#/components/responses/404NotFoundError"
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
+    /genomic_completeness:
+        get:
+            summary: Retrieve summary statistics on genomic data
+            description: Retrieve summary statistics on genomic data
+            operationId: query_operations.genomic_completeness
+            responses:
+                200:
+                    description: Retrieved genomic completness information
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GenomicCompletenessBody'
+                5XX:
+                    $ref: "#/components/responses/5xxServerError"
+                    
 components:
     parameters:
         treatmentParam:
@@ -118,6 +134,13 @@ components:
             example: hg38
             schema:
                 $ref: '#/components/schemas/Field'
+        excludeCohortsParam:
+            in: query
+            name: exclude_cohorts
+            description: A list of cohorts that will be excluded from results
+            example: SYNTHETIC-1
+            schema:
+                $ref: '#/components/schemas/Fields'
         pageSizeParam:
             in: query
             name: page_size
@@ -125,7 +148,7 @@ components:
             example: 10
             required: false
             schema:
-                $ref: '#/components/schemas/Field'
+                $ref: '#/components/schemas/IntField'
         pageParam:
             in: query
             name: page
@@ -133,7 +156,7 @@ components:
             example: 1
             required: false
             schema:
-                $ref: '#/components/schemas/Field'
+                $ref: '#/components/schemas/IntField'
 #        sessionIDParam:
 #            in: query
 #            name: session_id
@@ -152,6 +175,9 @@ components:
         Field:
             type: string
             description: Acceptable requested string for querying
+        IntField:
+            type: integer
+            description: Acceptable integer for querying
         QueryBody:
             type: object
             description: Query response
@@ -168,6 +194,13 @@ components:
                 prev:
                     type: string
                     description: URL to grab the previous set of results
+        GenomicCompletenessBody:
+            type: object
+            description: Genomic completeness statistics
+            properties:
+                results:
+                    type: object
+                    description: Summary statistics of program id (key) to another object with number of complete genomic and transcriptome cases
         # ERROR SCHEMAS
         Error:
             type: object
