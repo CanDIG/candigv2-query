@@ -245,11 +245,11 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=headers)
             specimen_query = safe_get_request_json(specimen_query_req, 'Katsu sample registrations')
             specimen_mapping = {}
-            for specimen in specimen_query['results']:
+            for specimen in specimen_query['items']:
                 specimen_mapping[specimen['submitter_sample_id']] = (specimen['submitter_donor_id'], specimen['tumour_normal_designation'])
 
             # handovers = htsget['results']['beaconHandovers']
-            genomic_query_info = htsget['results']['query_info']
+            genomic_query_info = htsget['query_info']
             for cohort in genomic_query_info:
                sample_ids = genomic_query_info[cohort]
                print(f"cohort {cohort} has samples {sample_ids}")
@@ -296,7 +296,6 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         for i, donor_id in enumerate(ret_donors):
             donor_id_url = urllib.parse.quote(donor_id)
             program_id_url = urllib.parse.quote(ret_programs[i])
-            print('asdf')
             r = requests.get(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
                 headers=headers)
             full_data['results'].append(safe_get_request_json(r, 'Katsu donor clinical data'))
