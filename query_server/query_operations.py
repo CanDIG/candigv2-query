@@ -55,43 +55,14 @@ def add_or_increment(dict, key):
         dict[key] = 1
 
 def get_summary_stats(donors, headers):
+    print("TEST")
+    print(donors)
     # Perform (and cache) summary statistics
-    diagnoses = requests.get(f"{config.KATSU_URL}/v2/authorized/primary_diagnoses/?page_size={PAGE_SIZE}",
-        headers=headers)
-    diagnoses = safe_get_request_json(diagnoses, 'Katsu diagnoses')['items']
-    # This search is inefficient O(m*n)
-    # Should find a better way (Preferably SQL again)
-    donor_date_of_births = {}
-    for donor in donors:
-        donor_date_of_births[donor['submitter_donor_id']] = donor['date_of_birth']
     age_at_diagnosis = {}
-    known_donors = {}
-    for diagnosis in diagnoses:
-        if diagnosis['submitter_donor_id'] in donor_date_of_births:
-            if diagnosis['submitter_donor_id'] not in known_donors.keys():
-                known_donors[diagnosis['submitter_donor_id']] = diagnosis
-    for diagnosis in known_donors.values():
-        # Make sure we have both dates necessary for this analysis
-        if 'date_of_diagnosis' not in diagnosis or diagnosis['date_of_diagnosis'] is None:
-            print(f"Unable to find diagnosis date for {diagnosis['submitter_donor_id']}")
-            add_or_increment(age_at_diagnosis, 'Unknown')
-            continue
-        if diagnosis['submitter_donor_id'] not in donor_date_of_births or donor_date_of_births[diagnosis['submitter_donor_id']] is None:
-            print(f"Unable to find date of birth for {diagnosis['submitter_donor_id']}")
-            add_or_increment(age_at_diagnosis, 'Unknown')
-            continue
-
-        diag_date = diagnosis['date_of_diagnosis'].split('-')
-        birth_date = donor_date_of_births[diagnosis['submitter_donor_id']].split('-')
-        if len(diag_date) < 2 or len(birth_date) < 2:
-            print(f"Unable to find date of birth/diagnosis for {diagnosis['submitter_donor_id']}")
-            add_or_increment(age_at_diagnosis, 'Unknown')
-            continue
-
-        age = int(diag_date[0]) - int(birth_date[0])
-        if int(diag_date[1]) >= int(birth_date[1]):
-            age += 1
-        age = age // 10 * 10
+    for donor in donors:
+        # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
+        # So we just use that info
+        age = abs(donor['date_of_birth']['month_interval']) // 12
         if age < 20:
             add_or_increment(age_at_diagnosis, '0-19 Years')
         elif age > 79:
