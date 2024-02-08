@@ -55,8 +55,6 @@ def add_or_increment(dict, key):
         dict[key] = 1
 
 def get_summary_stats(donors, headers):
-    print("TEST")
-    print(donors)
     # Perform (and cache) summary statistics
     age_at_diagnosis = {}
     for donor in donors:
