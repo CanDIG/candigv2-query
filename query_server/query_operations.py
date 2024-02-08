@@ -57,9 +57,13 @@ def add_or_increment(dict, key):
 def get_summary_stats(donors, headers):
     # Perform (and cache) summary statistics
     age_at_diagnosis = {}
+    donors_by_id = {}
+    cancer_type_count = {}
+    patients_per_cohort = {}
     for donor in donors:
         # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
         # So we just use that info
+        donors_by_id[donor["submitter_donor_id"]] = donor
         age = abs(donor['date_of_birth']['month_interval']) // 12
         age = age // 10 * 10
         if age < 20:
@@ -69,23 +73,7 @@ def get_summary_stats(donors, headers):
         else:
             add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
-    # Treatment types
-    # http://candig.docker.internal:8008/v2/authorized/treatments/
-    treatments = requests.get(f"{config.KATSU_URL}/v2/authorized/treatments/?page_size={PAGE_SIZE}",
-        headers=headers)
-    treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
-    treatment_type_count = {}
-    for treatment in treatments:
-        # This search is inefficient O(m*n)
-        for donor in donors:
-            if treatment["submitter_donor_id"] == donor["submitter_donor_id"]:
-                for treatment_type in treatment["treatment_type"]:
-                    add_or_increment(treatment_type_count, treatment_type)
-
-    # Cancer types
-    cancer_type_count = {}
-    patients_per_cohort = {}
-    for donor in donors:
+        # Cancer types
         for cancer_type in donor['primary_site']:
             if cancer_type in cancer_type_count:
                 cancer_type_count[cancer_type] += 1
@@ -96,6 +84,17 @@ def get_summary_stats(donors, headers):
             patients_per_cohort[program_id] += 1
         else:
             patients_per_cohort[program_id] = 1
+
+    # Treatment types
+    # http://candig.docker.internal:8008/v2/authorized/treatments/
+    treatments = requests.get(f"{config.KATSU_URL}/v2/authorized/treatments/?page_size={PAGE_SIZE}",
+        headers=headers)
+    treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
+    treatment_type_count = {}
+    for treatment in treatments:
+        if treatment["submitter_donor_id"] in donors_by_id:
+            for treatment_type in treatment["treatment_type"]:
+                add_or_increment(treatment_type_count, treatment_type)
 
     return {
         'age_at_diagnosis': age_at_diagnosis,
