@@ -63,6 +63,7 @@ def get_summary_stats(donors, headers):
         # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
         # So we just use that info
         age = abs(donor['date_of_birth']['month_interval']) // 12
+        age = age // 10 * 10
         if age < 20:
             add_or_increment(age_at_diagnosis, '0-19 Years')
         elif age > 79:
@@ -78,9 +79,10 @@ def get_summary_stats(donors, headers):
     treatment_type_count = {}
     for treatment in treatments:
         # This search is inefficient O(m*n)
-        if treatment['submitter_donor_id'] in donor_date_of_births:
-            for treatment_type in treatment['treatment_type']:
-                add_or_increment(treatment_type_count, treatment_type)
+        for donor in donors:
+            if treatment["submitter_donor_id"] == donor["submitter_donor_id"]:
+                for treatment_type in treatment["treatment_type"]:
+                    add_or_increment(treatment_type_count, treatment_type)
 
     # Cancer types
     cancer_type_count = {}
