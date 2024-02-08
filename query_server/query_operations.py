@@ -56,41 +56,15 @@ def add_or_increment(dict, key):
 
 def get_summary_stats(donors, headers):
     # Perform (and cache) summary statistics
-    diagnoses = requests.get(f"{config.KATSU_URL}/v2/authorized/primary_diagnoses/?page_size={PAGE_SIZE}",
-        headers=headers)
-    diagnoses = safe_get_request_json(diagnoses, 'Katsu diagnoses')['items']
-    # This search is inefficient O(m*n)
-    # Should find a better way (Preferably SQL again)
-    donor_date_of_births = {}
-    for donor in donors:
-        donor_date_of_births[donor['submitter_donor_id']] = donor['date_of_birth']
     age_at_diagnosis = {}
-    known_donors = {}
-    for diagnosis in diagnoses:
-        if diagnosis['submitter_donor_id'] in donor_date_of_births:
-            if diagnosis['submitter_donor_id'] not in known_donors.keys():
-                known_donors[diagnosis['submitter_donor_id']] = diagnosis
-    for diagnosis in known_donors.values():
-        # Make sure we have both dates necessary for this analysis
-        if 'date_of_diagnosis' not in diagnosis or diagnosis['date_of_diagnosis'] is None:
-            print(f"Unable to find diagnosis date for {diagnosis['submitter_donor_id']}")
-            add_or_increment(age_at_diagnosis, 'Unknown')
-            continue
-        if diagnosis['submitter_donor_id'] not in donor_date_of_births or donor_date_of_births[diagnosis['submitter_donor_id']] is None:
-            print(f"Unable to find date of birth for {diagnosis['submitter_donor_id']}")
-            add_or_increment(age_at_diagnosis, 'Unknown')
-            continue
-
-        diag_date = diagnosis['date_of_diagnosis'].split('-')
-        birth_date = donor_date_of_births[diagnosis['submitter_donor_id']].split('-')
-        if len(diag_date) < 2 or len(birth_date) < 2:
-            print(f"Unable to find date of birth/diagnosis for {diagnosis['submitter_donor_id']}")
-            add_or_increment(age_at_diagnosis, 'Unknown')
-            continue
-
-        age = int(diag_date[0]) - int(birth_date[0])
-        if int(diag_date[1]) >= int(birth_date[1]):
-            age += 1
+    donors_by_id = {}
+    cancer_type_count = {}
+    patients_per_cohort = {}
+    for donor in donors:
+        # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
+        # So we just use that info
+        donors_by_id[donor["submitter_donor_id"]] = donor
+        age = abs(donor['date_of_birth']['month_interval']) // 12
         age = age // 10 * 10
         if age < 20:
             add_or_increment(age_at_diagnosis, '0-19 Years')
@@ -99,22 +73,7 @@ def get_summary_stats(donors, headers):
         else:
             add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
-    # Treatment types
-    # http://candig.docker.internal:8008/v2/authorized/treatments/
-    treatments = requests.get(f"{config.KATSU_URL}/v2/authorized/treatments/?page_size={PAGE_SIZE}",
-        headers=headers)
-    treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
-    treatment_type_count = {}
-    for treatment in treatments:
-        # This search is inefficient O(m*n)
-        if treatment['submitter_donor_id'] in donor_date_of_births:
-            for treatment_type in treatment['treatment_type']:
-                add_or_increment(treatment_type_count, treatment_type)
-
-    # Cancer types
-    cancer_type_count = {}
-    patients_per_cohort = {}
-    for donor in donors:
+        # Cancer types
         for cancer_type in donor['primary_site']:
             if cancer_type in cancer_type_count:
                 cancer_type_count[cancer_type] += 1
@@ -125,6 +84,17 @@ def get_summary_stats(donors, headers):
             patients_per_cohort[program_id] += 1
         else:
             patients_per_cohort[program_id] = 1
+
+    # Treatment types
+    # http://candig.docker.internal:8008/v2/authorized/treatments/
+    treatments = requests.get(f"{config.KATSU_URL}/v2/authorized/treatments/?page_size={PAGE_SIZE}",
+        headers=headers)
+    treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
+    treatment_type_count = {}
+    for treatment in treatments:
+        if treatment["submitter_donor_id"] in donors_by_id:
+            for treatment_type in treatment["treatment_type"]:
+                add_or_increment(treatment_type_count, treatment_type)
 
     return {
         'age_at_diagnosis': age_at_diagnosis,
