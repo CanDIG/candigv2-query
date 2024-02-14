@@ -60,11 +60,25 @@ paths:
             operationId: query_operations.genomic_completeness
             responses:
                 200:
-                    description: Retrieved genomic completness information
+                    description: Retrieved genomic completeness information
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/GenomicCompletenessBody'
+                5XX:
+                    $ref: "#/components/responses/5xxServerError"
+    /discovery/programs:
+        get:
+            summary: Retrieve summary statistics on the metadata for each program, as well as the current site.
+            description: Retrieve summary statistics on the metadata for each program, as well as the current site.
+            operationId: query_operations.discovery_programs
+            responses:
+                200:
+                    description: Summary statistics
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscoveryProgramBody'
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
                     
@@ -201,6 +215,11 @@ components:
                 results:
                     type: object
                     description: Summary statistics of program id (key) to another object with number of complete genomic and transcriptome cases
+        DiscoveryProgramBody:
+            type: array
+            description: Genomic completeness statistics
+            items:
+                type: object
         # ERROR SCHEMAS
         Error:
             type: object
