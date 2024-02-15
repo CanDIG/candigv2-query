@@ -325,7 +325,8 @@ def discovery_programs():
     site_summary_stats = {
         'schemas_used': set(),
         'schemas_not_used': set(),
-        'required_but_missing': {}
+        'required_but_missing': {},
+        'cases_missing_data': set()
     }
     unused_schemas = set()
     unused_initialized = False
@@ -341,6 +342,7 @@ def discovery_programs():
             unused_initialized = True
             unused_schemas = set(metadata['schemas_not_used'])
         site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
+        site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
 
         required_but_missing = metadata['required_but_missing']
         for field in required_but_missing:
@@ -359,6 +361,7 @@ def discovery_programs():
         unused_schemas.discard(schema)
     site_summary_stats['schemas_not_used'] = list(unused_schemas)
     site_summary_stats['schemas_used'] = list(site_summary_stats['schemas_used'])
+    site_summary_stats['cases_missing_data'] = list(site_summary_stats['cases_missing_data'])
 
     # Return both the site's aggregated return value and each individual programs'
     ret_val = {
