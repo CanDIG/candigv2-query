@@ -216,10 +216,15 @@ components:
                     type: object
                     description: Summary statistics of program id (key) to another object with number of complete genomic and transcriptome cases
         DiscoveryProgramBody:
-            type: array
-            description: Genomic completeness statistics
-            items:
-                type: object
+            type: object
+            description: Discovery programs
+            properties:
+                site:
+                    type: object
+                    description: Whole-site summary statistics
+                programs:
+                    type: array
+                    description: Per-program summary statistics
         # ERROR SCHEMAS
         Error:
             type: object
