@@ -1,5 +1,5 @@
-from flask import request, Flask, session
-import json
+from flask import request, Flask
+import copy
 import re
 import requests
 import secrets
@@ -314,4 +314,60 @@ def genomic_completeness():
                 retVal[program_id]['transcriptomes'] += 1
 
     return retVal, 200
+
+@app.route('/discovery/programs')
+def discovery_programs():
+    # Grab all programs from Katsu
+    url = f"{config.KATSU_URL}/v2/discovery/programs/"
+    r = safe_get_request_json(requests.get(url), 'Katsu sample registrations')
+
+    # Aggregate all of the programs' return values into one value for the entire site
+    site_summary_stats = {
+        'schemas_used': set(),
+        'schemas_not_used': set(),
+        'required_but_missing': {},
+        'cases_missing_data': set()
+    }
+    unused_schemas = set()
+    unused_initialized = False
+    for program in r:
+        if 'metadata' not in program:
+            print(f"Strange result from Katsu: no metadata in {program}")
+            continue
+        metadata = program['metadata']
+
+        # There's five metadata categories we care about:
+        # schemas_used is a set, schemas_not_used is the inverse of that set
+        if not unused_initialized:
+            unused_initialized = True
+            unused_schemas = set(metadata['schemas_not_used'])
+        site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
+        site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
+
+        required_but_missing = metadata['required_but_missing']
+        for field in required_but_missing:
+            # Assuming these are of the form 'treatment_setting': {'total': 1, 'missing': 0}
+            if field in site_summary_stats['required_but_missing']:
+                for category in required_but_missing[field]:
+                    if category in site_summary_stats['required_but_missing'][field]:
+                        for instance in required_but_missing[field][category]:
+                            site_summary_stats['required_but_missing'][field][category][instance] += required_but_missing[field][category][instance]
+                    else:
+                        site_summary_stats['required_but_missing'][field][category] = copy.deepcopy(required_but_missing[field][category])
+            else:
+                site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
+
+    for schema in site_summary_stats['schemas_used']:
+        unused_schemas.discard(schema)
+    site_summary_stats['schemas_not_used'] = list(unused_schemas)
+    site_summary_stats['schemas_used'] = list(site_summary_stats['schemas_used'])
+    site_summary_stats['cases_missing_data'] = list(site_summary_stats['cases_missing_data'])
+
+    # Return both the site's aggregated return value and each individual programs'
+    ret_val = {
+        'site': site_summary_stats,
+        'programs': r
+    }
+
+    return ret_val, 200
 
