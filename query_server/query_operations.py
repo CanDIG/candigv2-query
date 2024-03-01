@@ -64,25 +64,27 @@ def get_summary_stats(donors, headers):
         # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
         # So we just use that info
         donors_by_id[donor["submitter_donor_id"]] = donor
-        age = abs(donor['date_of_birth']['month_interval']) // 12
-        age = age // 10 * 10
-        if age < 20:
-            add_or_increment(age_at_diagnosis, '0-19 Years')
-        elif age > 79:
-            add_or_increment(age_at_diagnosis, '80+ Years')
-        else:
-            add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
+        if donor['date_of_birth'] and donor['date_of_birth']['month_interval']:
+            age = abs(donor['date_of_birth']['month_interval']) // 12
+            age = age // 10 * 10
+            if age < 20:
+                add_or_increment(age_at_diagnosis, '0-19 Years')
+            elif age > 79:
+                add_or_increment(age_at_diagnosis, '80+ Years')
+            else:
+                add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
         # Cancer types
-        for cancer_type in donor['primary_site']:
-            if cancer_type in cancer_type_count:
-                cancer_type_count[cancer_type] += 1
-            else:
-                cancer_type_count[cancer_type] = 1
+        if donor['primary_site']:
+            for cancer_type in donor['primary_site']:
+                if cancer_type in cancer_type_count:
+                    cancer_type_count[cancer_type] += 1
+                else:
+                    cancer_type_count[cancer_type] = 1
         program_id = donor['program_id']
         if program_id in patients_per_cohort:
             patients_per_cohort[program_id] += 1
-        else:
+        elif program_id is not None:
             patients_per_cohort[program_id] = 1
 
     # Treatment types
