@@ -287,6 +287,12 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
 
 @app.route('/genomic_completeness')
 def genomic_completeness():
+    # Add a service token to the headers so that Katsu will know this is from the query service:
+    headers = {}
+    for k in request.headers.keys():
+        headers[k] = request.headers[k]
+    headers["X-Service-Token"] = config.SERVICE_TOKEN
+
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/authorized/sample_registrations/"
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
@@ -304,7 +310,7 @@ def genomic_completeness():
         # Check with HTSGet to see whether or not this sample is complete
         r = requests.get(f"{config.HTSGET_URL}/htsget/v1/samples/{sample_id}",
             # Reuse their bearer token
-            headers=request.headers)
+            headers=headers)
         if r.ok:
             r_json = r.json()
             retVal[program_id]
