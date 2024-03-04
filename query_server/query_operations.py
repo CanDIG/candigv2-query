@@ -227,7 +227,6 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                print(f"cohort {cohort} has samples {sample_ids}")
             htsget_found_donors = {}
             for response in htsget['response']:
-                genomic_query = response['caseLevelData']
                 for case_data in response['caseLevelData']:
                     if 'biosampleId' not in case_data:
                         print(f"Could not parse htsget response for {case_data}")
@@ -247,13 +246,22 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                         htsget_found_donors[case_data['donor_id']] = 1
                     else:
                         print(f"Could not parse biosampleId for {case_data}")
-                        case_data['program_id'] = ""
-                        case_data['donor_id'] = ""
+                        case_data['program_id'] = None
+                        case_data['donor_id'] = None
                         case_data['submitter_specimen_id'] = case_data['biosampleId']
                         case_data['tumour_normal_designation'] = 'Tumour'
                     case_data['position'] = response['variation']['location']['interval']['start']['value']
             # Filter clinical results based on genomic results
             donors = [donor for donor in donors if donor['submitter_donor_id'] in htsget_found_donors]
+            katsu_allowed_donors = {}
+            for donor in donors:
+                katsu_allowed_donors[f"{donor['program_id']}~{donor['submitter_donor_id']}"] = 1
+            for response in htsget['response']:
+                for case_data in response['caseLevelData']:
+                    if ('donor_id' in case_data and 'program_id' in case_data and
+                        f"{case_data['donor_id']}~{case_data['program_id']}" in katsu_allowed_donors):
+                        genomic_query.append(response)
+
         except Exception as ex:
             print(ex)
 
