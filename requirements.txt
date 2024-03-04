@@ -1,7 +1,7 @@
-Flask==2.2.2
+Flask==2.2.5
 Flask-Cors==3.0.10
 pytest==7.2.0
-connexion==2.14.1
+connexion==2.14.2
 uwsgi==2.0.23
 swagger-ui-bundle==0.0.9
-candigv2-authx@git+https://github.com/CanDIG/candigv2-authx.git@v2.1.0
+candigv2-authx@git+https://github.com/CanDIG/candigv2-authx.git@v2.1.2
