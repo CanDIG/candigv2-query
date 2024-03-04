@@ -204,7 +204,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
 
     # Now we combine this with HTSGet, if any
     genomic_query = []
-    genomic_query_info = None
+    # genomic_query_info = None
     if gene != "" or chrom != "":
         try:
             if gene != "":
@@ -220,11 +220,14 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             for specimen in specimen_query['items']:
                 specimen_mapping[specimen['submitter_sample_id']] = (specimen['submitter_donor_id'], specimen['tumour_normal_designation'])
 
-            # handovers = htsget['results']['beaconHandovers']
-            genomic_query_info = htsget['query_info']
-            for cohort in genomic_query_info:
-               sample_ids = genomic_query_info[cohort]
-               print(f"cohort {cohort} has samples {sample_ids}")
+            # genomic_query_info contains ALL matches from every dataset
+            # This is meant to be used to fill out the summary stats ONLY
+            # However, that part isn't covered in this PR (it's in DIG-1372 (https://candig.atlassian.net/browse/DIG-1372))
+            # and does not yet function
+            # genomic_query_info = htsget['query_info']
+            # for cohort in genomic_query_info:
+            #    sample_ids = genomic_query_info[cohort]
+
             htsget_found_donors = {}
             for response in htsget['response']:
                 for case_data in response['caseLevelData']:
@@ -259,8 +262,8 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             for response in htsget['response']:
                 for case_data in response['caseLevelData']:
                     if ('donor_id' in case_data and 'program_id' in case_data and
-                        f"{case_data['donor_id']}~{case_data['program_id']}" in katsu_allowed_donors):
-                        genomic_query.append(response)
+                        f"{case_data['program_id']}~{case_data['donor_id']}" in katsu_allowed_donors):
+                        genomic_query.append(case_data)
 
         except Exception as ex:
             print(ex)
@@ -286,7 +289,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     full_data['summary'] = summary_stats
     full_data['next'] = None
     full_data['prev'] = None
-    full_data['genomic_query_info'] = genomic_query_info
+    # full_data['genomic_query_info'] = genomic_query_info
 
     # Add prev and next parameters to the repsonse, appending a session ID.
     # Essentially we want to go session ID -> list of donors
