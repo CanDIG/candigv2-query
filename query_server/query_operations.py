@@ -389,4 +389,3 @@ def discovery_programs():
     }
 
     return ret_val, 200
-
