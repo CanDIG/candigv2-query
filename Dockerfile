@@ -30,7 +30,8 @@ RUN apk add --no-cache \
 	yaml-dev \
 	pcre-dev \
 	git \
-	sqlite
+	sqlite \
+ 	libffi-dev
 
 COPY requirements.txt /app/query_server/requirements.txt
 
