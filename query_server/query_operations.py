@@ -95,8 +95,12 @@ def get_summary_stats(donors, headers):
     treatment_type_count = {}
     for treatment in treatments:
         if treatment["submitter_donor_id"] in donors_by_id:
-            for treatment_type in treatment["treatment_type"]:
-                add_or_increment(treatment_type_count, treatment_type)
+            try:
+                for treatment_type in treatment["treatment_type"]:
+                    add_or_increment(treatment_type_count, treatment_type)
+            except TypeError as e:
+                print(e)
+                pass
 
     return {
         'age_at_diagnosis': age_at_diagnosis,
