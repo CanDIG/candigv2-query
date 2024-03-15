@@ -341,18 +341,677 @@ def genomic_completeness():
 @app.route('/discovery/programs')
 def discovery_programs():
     # Grab all programs from Katsu
-    url = f"{config.KATSU_URL}/v2/discovery/programs/"
-    r = safe_get_request_json(requests.get(url), 'Katsu sample registrations')
+    # url = f"{config.KATSU_URL}/v2/discovery/programs/"
+    # r = safe_get_request_json(requests.get(url), 'Katsu sample registrations')
 
     # Aggregate all of the programs' return values into one value for the entire site
     site_summary_stats = {
         'schemas_used': set(),
         'schemas_not_used': set(),
         'required_but_missing': {},
-        'cases_missing_data': set()
+        'cases_missing_data': set(),
+        'summary_cases': {
+            'total_cases': 0,
+            'complete_cases': 0
+        }
     }
     unused_schemas = set()
     unused_initialized = False
+    r = [
+  {
+    'program_id': 'SYNTHETIC-1',
+    'metadata': {
+      'schemas_used': [
+        'donors',
+        'primary_diagnoses',
+        'specimens',
+        'sample_registrations',
+        'treatments',
+        'chemotherapies',
+        'followups',
+        'hormone_therapies',
+        'comorbidities',
+        'exposures',
+        'biomarkers',
+        'immunotherapies',
+        'radiations'
+      ],
+      'summary_cases': {
+        'total_cases': 6,
+        'complete_cases': 0
+      },
+      'schemas_not_used': [
+        'surgeries'
+      ],
+      'cases_missing_data': [
+        'DONOR_1',
+        'DONOR_2',
+        'DONOR_3',
+        'DONOR_4',
+        'DONOR_5',
+        'DONOR_6'
+      ],
+      'required_but_missing': {
+        'donors': {
+          'gender': {
+            'total': 6,
+            'missing': 1
+          },
+          'program_id': {
+            'total': 6,
+            'missing': 0
+          },
+          'is_deceased': {
+            'total': 6,
+            'missing': 2
+          },
+          'primary_site': {
+            'total': 6,
+            'missing': 1
+          },
+          'sex_at_birth': {
+            'total': 6,
+            'missing': 3
+          },
+          'date_of_birth': {
+            'total': 6,
+            'missing': 1
+          },
+          'date_resolution': {
+            'total': 6,
+            'missing': 0
+          },
+          'submitter_donor_id': {
+            'total': 6,
+            'missing': 0
+          }
+        },
+        'exposures': {},
+        'followups': {
+          'date_of_followup': {
+            'total': 27,
+            'missing': 2
+          },
+          'submitter_follow_up_id': {
+            'total': 27,
+            'missing': 0
+          },
+          'disease_status_at_followup': {
+            'total': 27,
+            'missing': 3
+          }
+        },
+        'specimens': {
+          'specimen_storage': {
+            'total': 18,
+            'missing': 3
+          },
+          'submitter_specimen_id': {
+            'total': 18,
+            'missing': 0
+          },
+          'specimen_collection_date': {
+            'total': 18,
+            'missing': 1
+          },
+          'specimen_anatomic_location': {
+            'total': 18,
+            'missing': 2
+          }
+        },
+        'biomarkers': {},
+        'radiations': {
+          'radiation_therapy_type': {
+            'total': 3,
+            'missing': 1
+          },
+          'radiation_therapy_dosage': {
+            'total': 3,
+            'missing': 0
+          },
+          'anatomical_site_irradiated': {
+            'total': 3,
+            'missing': 0
+          },
+          'radiation_therapy_modality': {
+            'total': 3,
+            'missing': 1
+          },
+          'radiation_therapy_fractions': {
+            'total': 3,
+            'missing': 0
+          }
+        },
+        'treatments': {
+          'treatment_type': {
+            'total': 21,
+            'missing': 5
+          },
+          'treatment_intent': {
+            'total': 21,
+            'missing': 3
+          },
+          'treatment_setting': {
+            'total': 21,
+            'missing': 4
+          },
+          'treatment_end_date': {
+            'total': 21,
+            'missing': 3
+          },
+          'is_primary_treatment': {
+            'total': 21,
+            'missing': 1
+          },
+          'treatment_start_date': {
+            'total': 21,
+            'missing': 2
+          },
+          'response_to_treatment': {
+            'total': 21,
+            'missing': 4
+          },
+          'submitter_treatment_id': {
+            'total': 21,
+            'missing': 0
+          },
+          'response_to_treatment_criteria_method': {
+            'total': 21,
+            'missing': 3
+          }
+        },
+        'comorbidities': {
+          'comorbidity_type_code': {
+            'total': 12,
+            'missing': 1
+          }
+        },
+        'chemotherapies': {
+          'drug_name': {
+            'total': 15,
+            'missing': 1
+          },
+          'drug_reference_database': {
+            'total': 15,
+            'missing': 3
+          },
+          'drug_reference_identifier': {
+            'total': 15,
+            'missing': 3
+          }
+        },
+        'immunotherapies': {
+          'drug_name': {
+            'total': 11,
+            'missing': 1
+          },
+          'drug_reference_database': {
+            'total': 11,
+            'missing': 0
+          },
+          'drug_reference_identifier': {
+            'total': 11,
+            'missing': 0
+          }
+        },
+        'hormone_therapies': {
+          'drug_name': {
+            'total': 14,
+            'missing': 2
+          },
+          'drug_reference_database': {
+            'total': 14,
+            'missing': 4
+          },
+          'drug_reference_identifier': {
+            'total': 14,
+            'missing': 4
+          }
+        },
+        'primary_diagnoses': {
+          'cancer_type_code': {
+            'total': 12,
+            'missing': 1
+          },
+          'date_of_diagnosis': {
+            'total': 12,
+            'missing': 0
+          },
+          'basis_of_diagnosis': {
+            'total': 12,
+            'missing': 1
+          },
+          'lymph_nodes_examined_status': {
+            'total': 12,
+            'missing': 2
+          },
+          'submitter_primary_diagnosis_id': {
+            'total': 12,
+            'missing': 0
+          }
+        },
+        'sample_registrations': {
+          'sample_type': {
+            'total': 24,
+            'missing': 3
+          },
+          'specimen_type': {
+            'total': 24,
+            'missing': 5
+          },
+          'submitter_sample_id': {
+            'total': 24,
+            'missing': 0
+          },
+          'specimen_tissue_source': {
+            'total': 24,
+            'missing': 2
+          }
+        }
+      }
+    }
+  },
+  {
+    'program_id': 'SYNTHETIC-2',
+    'metadata': {
+      'schemas_used': [
+        'donors',
+        'primary_diagnoses',
+        'specimens',
+        'sample_registrations',
+        'treatments',
+        'surgeries',
+        'followups',
+        'radiations',
+        'comorbidities',
+        'exposures',
+        'biomarkers',
+        'chemotherapies',
+        'hormone_therapies',
+        'immunotherapies'
+      ],
+      'summary_cases': {
+        'total_cases': 7,
+        'complete_cases': 1
+      },
+      'schemas_not_used': [],
+      'cases_missing_data': [
+        'DONOR_10',
+        'DONOR_7',
+        'DONOR_8',
+        'DONOR_9',
+        'DONOR_ALL_01',
+        'DONOR_NULL'
+      ],
+      'required_but_missing': {
+        'donors': {
+          'gender': {
+            'total': 7,
+            'missing': 2
+          },
+          'program_id': {
+            'total': 7,
+            'missing': 0
+          },
+          'is_deceased': {
+            'total': 7,
+            'missing': 2
+          },
+          'primary_site': {
+            'total': 7,
+            'missing': 1
+          },
+          'sex_at_birth': {
+            'total': 7,
+            'missing': 1
+          },
+          'date_of_birth': {
+            'total': 7,
+            'missing': 3
+          },
+          'date_resolution': {
+            'total': 7,
+            'missing': 0
+          },
+          'submitter_donor_id': {
+            'total': 7,
+            'missing': 0
+          }
+        },
+        'exposures': {},
+        'followups': {
+          'date_of_followup': {
+            'total': 10,
+            'missing': 3
+          },
+          'submitter_follow_up_id': {
+            'total': 10,
+            'missing': 0
+          },
+          'disease_status_at_followup': {
+            'total': 10,
+            'missing': 4
+          }
+        },
+        'specimens': {
+          'specimen_storage': {
+            'total': 7,
+            'missing': 2
+          },
+          'submitter_specimen_id': {
+            'total': 7,
+            'missing': 0
+          },
+          'specimen_collection_date': {
+            'total': 7,
+            'missing': 1
+          },
+          'specimen_anatomic_location': {
+            'total': 7,
+            'missing': 1
+          }
+        },
+        'surgeries': {
+          'surgery_type': {
+            'total': 8,
+            'missing': 3
+          }
+        },
+        'biomarkers': {},
+        'radiations': {
+          'radiation_therapy_type': {
+            'total': 7,
+            'missing': 2
+          },
+          'radiation_therapy_dosage': {
+            'total': 7,
+            'missing': 3
+          },
+          'anatomical_site_irradiated': {
+            'total': 7,
+            'missing': 2
+          },
+          'radiation_therapy_modality': {
+            'total': 7,
+            'missing': 2
+          },
+          'radiation_therapy_fractions': {
+            'total': 7,
+            'missing': 3
+          }
+        },
+        'treatments': {
+          'treatment_type': {
+            'total': 16,
+            'missing': 5
+          },
+          'treatment_intent': {
+            'total': 16,
+            'missing': 11
+          },
+          'treatment_setting': {
+            'total': 16,
+            'missing': 2
+          },
+          'treatment_end_date': {
+            'total': 16,
+            'missing': 3
+          },
+          'is_primary_treatment': {
+            'total': 16,
+            'missing': 2
+          },
+          'treatment_start_date': {
+            'total': 16,
+            'missing': 2
+          },
+          'response_to_treatment': {
+            'total': 16,
+            'missing': 2
+          },
+          'submitter_treatment_id': {
+            'total': 16,
+            'missing': 0
+          },
+          'response_to_treatment_criteria_method': {
+            'total': 16,
+            'missing': 2
+          }
+        },
+        'comorbidities': {
+          'comorbidity_type_code': {
+            'total': 7,
+            'missing': 2
+          }
+        },
+        'chemotherapies': {
+          'drug_name': {
+            'total': 5,
+            'missing': 2
+          },
+          'drug_reference_database': {
+            'total': 5,
+            'missing': 2
+          },
+          'drug_reference_identifier': {
+            'total': 5,
+            'missing': 3
+          }
+        },
+        'immunotherapies': {
+          'drug_name': {
+            'total': 5,
+            'missing': 2
+          },
+          'drug_reference_database': {
+            'total': 5,
+            'missing': 2
+          },
+          'drug_reference_identifier': {
+            'total': 5,
+            'missing': 2
+          }
+        },
+        'hormone_therapies': {
+          'drug_name': {
+            'total': 5,
+            'missing': 1
+          },
+          'drug_reference_database': {
+            'total': 5,
+            'missing': 3
+          },
+          'drug_reference_identifier': {
+            'total': 5,
+            'missing': 2
+          }
+        },
+        'primary_diagnoses': {
+          'cancer_type_code': {
+            'total': 7,
+            'missing': 2
+          },
+          'date_of_diagnosis': {
+            'total': 7,
+            'missing': 1
+          },
+          'basis_of_diagnosis': {
+            'total': 7,
+            'missing': 2
+          },
+          'lymph_nodes_examined_status': {
+            'total': 7,
+            'missing': 1
+          },
+          'submitter_primary_diagnosis_id': {
+            'total': 7,
+            'missing': 0
+          }
+        },
+        'sample_registrations': {
+          'sample_type': {
+            'total': 8,
+            'missing': 3
+          },
+          'specimen_type': {
+            'total': 8,
+            'missing': 2
+          },
+          'submitter_sample_id': {
+            'total': 8,
+            'missing': 0
+          },
+          'specimen_tissue_source': {
+            'total': 8,
+            'missing': 3
+          }
+        }
+      }
+    }
+  },
+  {
+    'program_id': 'TEST_2',
+    'metadata': {
+      'schemas_used': [
+        'donors',
+        'primary_diagnoses',
+        'specimens',
+        'treatments'
+      ],
+      'summary_cases': {
+        'total_cases': 1,
+        'complete_cases': 1
+      },
+      'schemas_not_used': [
+        'hormone_therapies',
+        'sample_registrations',
+        'chemotherapies',
+        'biomarkers',
+        'immunotherapies',
+        'radiations',
+        'followups',
+        'surgeries',
+        'exposures',
+        'comorbidities'
+      ],
+      'cases_missing_data': [],
+      'required_but_missing': {
+        'donors': {
+          'gender': {
+            'total': 1,
+            'missing': 0
+          },
+          'program_id': {
+            'total': 1,
+            'missing': 0
+          },
+          'is_deceased': {
+            'total': 1,
+            'missing': 0
+          },
+          'primary_site': {
+            'total': 1,
+            'missing': 0
+          },
+          'sex_at_birth': {
+            'total': 1,
+            'missing': 0
+          },
+          'date_of_birth': {
+            'total': 1,
+            'missing': 0
+          },
+          'date_resolution': {
+            'total': 1,
+            'missing': 0
+          },
+          'submitter_donor_id': {
+            'total': 1,
+            'missing': 0
+          }
+        },
+        'specimens': {
+          'specimen_storage': {
+            'total': 1,
+            'missing': 0
+          },
+          'submitter_specimen_id': {
+            'total': 1,
+            'missing': 0
+          },
+          'specimen_collection_date': {
+            'total': 1,
+            'missing': 0
+          },
+          'specimen_anatomic_location': {
+            'total': 1,
+            'missing': 0
+          }
+        },
+        'treatments': {
+          'treatment_type': {
+            'total': 1,
+            'missing': 0
+          },
+          'treatment_intent': {
+            'total': 1,
+            'missing': 0
+          },
+          'treatment_setting': {
+            'total': 1,
+            'missing': 0
+          },
+          'treatment_end_date': {
+            'total': 1,
+            'missing': 0
+          },
+          'is_primary_treatment': {
+            'total': 1,
+            'missing': 0
+          },
+          'treatment_start_date': {
+            'total': 1,
+            'missing': 0
+          },
+          'response_to_treatment': {
+            'total': 1,
+            'missing': 0
+          },
+          'submitter_treatment_id': {
+            'total': 1,
+            'missing': 0
+          },
+          'response_to_treatment_criteria_method': {
+            'total': 1,
+            'missing': 0
+          }
+        },
+        'primary_diagnoses': {
+          'cancer_type_code': {
+            'total': 1,
+            'missing': 0
+          },
+          'date_of_diagnosis': {
+            'total': 1,
+            'missing': 0
+          },
+          'basis_of_diagnosis': {
+            'total': 1,
+            'missing': 0
+          },
+          'lymph_nodes_examined_status': {
+            'total': 1,
+            'missing': 0
+          },
+          'submitter_primary_diagnosis_id': {
+            'total': 1,
+            'missing': 0
+          }
+        }
+      }
+    }
+  }
+]
     for program in r:
         if 'metadata' not in program:
             print(f"Strange result from Katsu: no metadata in {program}")
@@ -366,6 +1025,8 @@ def discovery_programs():
             unused_schemas = set(metadata['schemas_not_used'])
         site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
         site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
+        site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
+        site_summary_stats['summary_cases']['total_cases'] += metadata['summary_cases']['total_cases']
 
         required_but_missing = metadata['required_but_missing']
         for field in required_but_missing:
@@ -393,4 +1054,3 @@ def discovery_programs():
     }
 
     return ret_val, 200
-
