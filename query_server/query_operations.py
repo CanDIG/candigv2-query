@@ -349,7 +349,11 @@ def discovery_programs():
         'schemas_used': set(),
         'schemas_not_used': set(),
         'required_but_missing': {},
-        'cases_missing_data': set()
+        'cases_missing_data': set(),
+        'summary_cases': {
+            'total_cases': 0,
+            'complete_cases': 0
+        }
     }
     unused_schemas = set()
     unused_initialized = False
@@ -366,6 +370,8 @@ def discovery_programs():
             unused_schemas = set(metadata['schemas_not_used'])
         site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
         site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
+        site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
+        site_summary_stats['summary_cases']['total_cases'] += metadata['summary_cases']['total_cases']
 
         required_but_missing = metadata['required_but_missing']
         for field in required_but_missing:
@@ -393,4 +399,3 @@ def discovery_programs():
     }
 
     return ret_val, 200
-
