@@ -114,7 +114,7 @@ def query_htsget_gene(headers, gene_array):
         payload = {
             'query': {
                 'requestParameters': {
-                    'gene_id': g
+                    'geneId': g
                 }
             },
             'meta': {
