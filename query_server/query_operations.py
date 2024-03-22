@@ -368,23 +368,35 @@ def discovery_programs():
         if not unused_initialized:
             unused_initialized = True
             unused_schemas = set(metadata['schemas_not_used'])
-        site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
-        site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
-        site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
-        site_summary_stats['summary_cases']['total_cases'] += metadata['summary_cases']['total_cases']
+        if 'schemas_used' in metadata:
+            site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
+        if 'cases_missing_data' in metadata:
+            site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
+        if 'summary_cases' in metadata:
+            try:
+                site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
+                site_summary_stats['summary_cases']['total_cases'] += metadata['summary_cases']['total_cases']
+            except:
+                print(f"Strange result from Katsu: unreadable summary_cases in {program} metadata")
 
+        if 'required_but_missing' not in metadata:
+            # Unreadable result; we cannot continue
+            continue
         required_but_missing = metadata['required_but_missing']
-        for field in required_but_missing:
-            # Assuming these are of the form 'treatment_setting': {'total': 1, 'missing': 0}
-            if field in site_summary_stats['required_but_missing']:
-                for category in required_but_missing[field]:
-                    if category in site_summary_stats['required_but_missing'][field]:
-                        for instance in required_but_missing[field][category]:
-                            site_summary_stats['required_but_missing'][field][category][instance] += required_but_missing[field][category][instance]
-                    else:
-                        site_summary_stats['required_but_missing'][field][category] = copy.deepcopy(required_but_missing[field][category])
-            else:
-                site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
+        try:
+            for field in required_but_missing:
+                # Assuming these are of the form 'treatment_setting': {'total': 1, 'missing': 0}
+                if field in site_summary_stats['required_but_missing']:
+                    for category in required_but_missing[field]:
+                        if category in site_summary_stats['required_but_missing'][field]:
+                            for instance in required_but_missing[field][category]:
+                                site_summary_stats['required_but_missing'][field][category][instance] += required_but_missing[field][category][instance]
+                        else:
+                            site_summary_stats['required_but_missing'][field][category] = copy.deepcopy(required_but_missing[field][category])
+                else:
+                    site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
+        except Exception as ex:
+            print(f"Unable to parse required fields result from Katsu: {ex}")
 
     for schema in site_summary_stats['schemas_used']:
         unused_schemas.discard(schema)
