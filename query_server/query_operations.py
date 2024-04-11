@@ -309,10 +309,10 @@ def genomic_completeness():
     headers["X-Service-Token"] = config.SERVICE_TOKEN
 
     params = { 'page_size': PAGE_SIZE }
-    url = f"{config.KATSU_URL}/v2/authorized/sample_registrations/"
+    url = f"{config.KATSU_URL}/v2/discovery/sample_registrations/"
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
         # Reuse their bearer token
-        headers=request.headers), 'Katsu sample registrations')
+        headers=headers), 'Katsu sample registrations')
     samples = r['items']
 
     retVal = {}
