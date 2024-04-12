@@ -81,6 +81,30 @@ paths:
                                 $ref: '#/components/schemas/DiscoveryProgramBody'
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
+    /discovery/query:
+        get:
+            summary: Retrieve summary statistics on the metadata for each program that match the given query parameters.
+            description: Retrieve summary statistics on the metadata for each program that match the given query parameters.
+            operationId: query_operations.discovery_query
+            parameters:
+                - $ref: "#/components/parameters/treatmentParam"
+                - $ref: "#/components/parameters/primarySiteParam"
+                - $ref: "#/components/parameters/chemotherapyParam"
+                - $ref: "#/components/parameters/immunotherapyParam"
+                - $ref: "#/components/parameters/hormoneTherapyParam"
+                - $ref: "#/components/parameters/chrParam"
+                - $ref: "#/components/parameters/geneParam"
+                - $ref: "#/components/parameters/assemblyParam"
+                - $ref: "#/components/parameters/excludeCohortsParam"
+            responses:
+                200:
+                    description: Summary statistics
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscoveryProgramBody'
+                5XX:
+                    $ref: "#/components/responses/5xxServerError"
                     
 components:
     parameters:
