@@ -313,18 +313,22 @@ def genomic_completeness():
     headers["X-Service-Token"] = config.SERVICE_TOKEN
 
     params = { 'page_size': PAGE_SIZE }
-    url = f"{config.KATSU_URL}/v2/discovery/sample_registrations/"
+    url = f"{config.KATSU_URL}/v2/explorer/donors/"
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
         # Reuse their bearer token
-        headers=headers), 'Katsu sample registrations')
-    samples = r['items']
+        headers=headers), 'Katsu explorer donors')
+    # First, we need to map all Katsu-identified specimens
+    samples_mapping = {}
+    for donor in r:
+        if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
+            for sample_id in donor['submitter_sample_ids']:
+                samples_mapping[sample_id] = donor['program_id']
 
     retVal = {}
-    for sample in samples:
-        program_id = sample['program_id']
+    for sample_id in samples_mapping.keys():
+        program_id = samples_mapping[sample_id]
         if program_id not in retVal:
             retVal[program_id] = { 'genomes': 0, 'transcriptomes': 0, 'all': 0 }
-        sample_id = sample['submitter_sample_id']
 
         # Check with HTSGet to see whether or not this sample is complete
         r = requests.get(f"{config.HTSGET_URL}/htsget/v1/samples/{sample_id}",
