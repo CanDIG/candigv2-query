@@ -13,6 +13,8 @@ PORT = config['DEFAULT']['Port']
 HTSGET_URL = config['DEFAULT']['CANDIG_HTSGET_URL']
 KATSU_URL = config['DEFAULT']['CANDIG_KATSU_URL']
 
+CENSOR_MINIMUM = int(config['DEFAULT']['CENSOR_MINIMUM'])
+
 DEBUG_MODE = False
 if os.getenv("DEBUG_MODE", "1") == "1":
     DEBUG_MODE = True
