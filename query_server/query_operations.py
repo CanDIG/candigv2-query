@@ -496,10 +496,9 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
                 add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
 
     # Censor summary statistics for categories where there isn't enough data to respond
-    if config.CENSOR_MINIMUM.isdigit():
-        for category in summary_stats:
-            for entry in summary_stats[category]:
-                if summary_stats[category][entry] < config.CENSOR_MINIMUM:
-                    summary_stats[category][entry] = f"<{config.CENSOR_MINIMUM}"
+    for category in summary_stats:
+        for entry in summary_stats[category]:
+            if summary_stats[category][entry] < config.CENSOR_MINIMUM and summary_stats[category][entry] != 0:
+                summary_stats[category][entry] = f"<{config.CENSOR_MINIMUM}"
 
     return summary_stats, 200
