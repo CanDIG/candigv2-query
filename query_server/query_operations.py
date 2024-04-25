@@ -183,7 +183,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         primary_site_params = [("primary_site", x) for x in primary_site]
     print(f"{url}?{urllib.parse.urlencode(params)}&{urllib.parse.urlencode(primary_site_params)}")
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params['page_size'])}&"
-                                           f"{urllib.parse.urlencode(params['primary_site'])}",
+                                           f"{urllib.parse.urlencode(primary_site_params)}",
         # Reuse their bearer token
         headers=headers), 'Katsu Donors')
     donors = r['items']
