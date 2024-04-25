@@ -180,9 +180,10 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/authorized/donors/"
     if primary_site != "" and len(primary_site) > 1:
-        params['primary_site'] = "&primary_site=".join(primary_site)
-    print(f"{url}?primary_site={urllib.parse.urlencode(params)}")
-    r = safe_get_request_json(requests.get(f"{url}?primary_site={urllib.parse.urlencode(params)}",
+        params['primary_site'] = [urllib.parse.quote(x) for x in params['primary_site']]
+        params['primary_site'] = "&primary_site=".join(params['primary_site'])
+    print(f"{url}?primary_site={params}")
+    r = safe_get_request_json(requests.get(f"{url}?primary_site={params}",
         # Reuse their bearer token
         headers=headers), 'Katsu Donors')
     donors = r['items']
