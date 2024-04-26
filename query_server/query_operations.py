@@ -1,3 +1,4 @@
+from datetime import datetime
 from flask import request, Flask
 import copy
 import re
@@ -29,6 +30,18 @@ def get_service_info():
         "version": "0.1.0"
     }
 
+def timed_request(url, **kwargs):
+    start_req = datetime.now()
+    retval = requests.get(url, **kwargs)
+    print(f"request to {url} finished at {datetime.now() - start_req}")
+    return retval
+
+def timed_post(url, **kwargs):
+    start_req = datetime.now()
+    retval = requests.post(url, **kwargs)
+    print(f"request to {url} finished at {datetime.now() - start_req}")
+    return retval
+
 def safe_get_request_json(request, name):
     if not request.ok:
         raise Exception(f"Could not get {name} response: {request.status_code} {request.text}")
@@ -43,7 +56,7 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers):
             param_name: parameter,
             'page_size': PAGE_SIZE
         }
-        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
+        treatments = timed_request(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
         results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
     return permissible_donors
@@ -89,7 +102,7 @@ def get_summary_stats(donors, headers):
 
     # Treatment types
     # http://candig.docker.internal:8008/v2/authorized/treatments/
-    treatments = requests.get(f"{config.KATSU_URL}/v2/authorized/treatments/?page_size={PAGE_SIZE}",
+    treatments = timed_request(f"{config.KATSU_URL}/v2/authorized/treatments/?page_size={PAGE_SIZE}",
         headers=headers)
     treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
     treatment_type_count = {}
@@ -122,7 +135,7 @@ def query_htsget_gene(headers, gene_array):
             }
         }
 
-        return safe_get_request_json(requests.post(
+        return safe_get_request_json(timed_post(
             f"{config.HTSGET_URL}/beacon/v2/g_variants",
             headers=headers,
             json=payload), 'HTSGet Gene')
@@ -142,7 +155,7 @@ def query_htsget_pos(headers, assembly, chrom, start=0, end=10000000):
         }
     }
 
-    return safe_get_request_json(requests.post(
+    return safe_get_request_json(timed_post(
         f"{config.HTSGET_URL}/beacon/v2/g_variants",
         headers=headers,
         json=payload), 'HTSGet position')
@@ -175,6 +188,8 @@ def fix_dicts(to_fix):
 
 @app.route('/query')
 def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
+    start_time = datetime.now()
+    print(f"query started at {datetime.now()}")
     # Add a service token to the headers so that other services will know this is from the query service:
     headers = {}
     for k in request.headers.keys():
@@ -188,8 +203,8 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/authorized/donors/"
     if primary_site != "":
-        params['primary_site'] = ",".join(primary_site)
-    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
+        params['primary_site'] = primary_site
+    r = safe_get_request_json(timed_request(f"{url}?{urllib.parse.urlencode(params, True)}",
         # Reuse their bearer token
         headers=headers), 'Katsu Donors')
     donors = r['items']
@@ -222,7 +237,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             htsget = query_htsget(headers, gene, assembly, chrom)
 
             # We need to be able to map specimens, so we'll grab it from Katsu
-            specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=headers)
+            specimen_query_req = timed_request(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=headers)
             specimen_query = safe_get_request_json(specimen_query_req, 'Katsu sample registrations')
             specimen_mapping = {}
             for specimen in specimen_query['items']:
@@ -287,7 +302,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         for i, donor_id in enumerate(ret_donors):
             donor_id_url = urllib.parse.quote(donor_id)
             program_id_url = urllib.parse.quote(ret_programs[i])
-            r = requests.get(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
+            r = timed_request(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
                 headers=headers)
             full_data['results'].append(safe_get_request_json(r, 'Katsu donor clinical data'))
     else:
@@ -302,10 +317,13 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     # Add prev and next parameters to the repsonse, appending a session ID.
     # Essentially we want to go session ID -> list of donors
     # and then paginate the list of donors, calling donors_with_clinical_data on each before returning
+    print(f"query finished at {datetime.now()} ({datetime.now() - start_time}s elapsed)")
     return fix_dicts(full_data), 200
 
 @app.route('/genomic_completeness')
 def genomic_completeness():
+    start_time = datetime.now()
+    print(f"genomic_completeness started at {datetime.now()}")
     # Add a service token to the headers so that Katsu will know this is from the query service:
     headers = {}
     for k in request.headers.keys():
@@ -314,7 +332,7 @@ def genomic_completeness():
 
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/explorer/donors/"
-    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
+    r = safe_get_request_json(timed_request(f"{url}?{urllib.parse.urlencode(params)}",
         # Reuse their bearer token
         headers=headers), 'Katsu explorer donors')
     # First, we need to map all Katsu-identified specimens
@@ -331,7 +349,7 @@ def genomic_completeness():
             retVal[program_id] = { 'genomes': 0, 'transcriptomes': 0, 'all': 0 }
 
         # Check with HTSGet to see whether or not this sample is complete
-        r = requests.get(f"{config.HTSGET_URL}/htsget/v1/samples/{sample_id}",
+        r = timed_request(f"{config.HTSGET_URL}/htsget/v1/samples/{sample_id}",
             # Reuse their bearer token
             headers=headers)
         if r.ok:
@@ -344,13 +362,16 @@ def genomic_completeness():
             if len(r_json['transcriptomes']) > 0:
                 retVal[program_id]['transcriptomes'] += 1
 
+    print(f"genomic_completeness finished at {datetime.now()} ({datetime.now() - start_time}s elapsed)")
     return retVal, 200
 
 @app.route('/discovery/programs')
 def discovery_programs():
+    start_time = datetime.now()
+    print(f"discovery_programs started at {datetime.now()}")
     # Grab all programs from Katsu
     url = f"{config.KATSU_URL}/v2/discovery/programs/"
-    r = safe_get_request_json(requests.get(url), 'Katsu sample registrations')
+    r = safe_get_request_json(timed_request(url), 'Katsu sample registrations')
 
     # Aggregate all of the programs' return values into one value for the entire site
     site_summary_stats = {
@@ -418,10 +439,13 @@ def discovery_programs():
         'programs': r
     }
 
+    print(f"discovery_programs finished at {datetime.now()} ({datetime.now() - start_time}s elapsed)")
     return ret_val, 200
 
 @app.route('/discovery/query')
 def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+    start_time = datetime.now()
+    print(f"discovery_query started at {datetime.now()}")
     url = f"{config.KATSU_URL}/v2/explorer/donors/"
     headers = {}
     for k in request.headers.keys():
@@ -443,7 +467,7 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
         params[param[1]] = param[0]
 
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
-    donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
+    donors = safe_get_request_json(timed_request(full_url, headers=headers), 'Katsu explorer donors')
 
     # Cross reference with HTSGet, if necessary
     if gene != "" or chrom != "":
@@ -495,4 +519,5 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
             else:
                 add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
 
+    print(f"discovery_query finished at {datetime.now()} ({datetime.now() - start_time}s elapsed)")
     return summary_stats, 200
