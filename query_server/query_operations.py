@@ -180,16 +180,10 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/authorized/donors/"
     if primary_site != "":
-        primary_site_params = [("primary_site", x) for x in primary_site]
-        print(f"{url}?{urllib.parse.urlencode(params)}&{urllib.parse.urlencode(primary_site_params)}")
-        r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}&"
-                                               f"{urllib.parse.urlencode(primary_site_params)}",
-                                               # Reuse their bearer token
-                                               headers=headers), 'Katsu Donors')
-    else:
-        r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
-                                               # Reuse their bearer token
-                                               headers=headers), 'Katsu Donors')
+        params['primary_site'] = primary_site
+    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params, True)}",
+        # Reuse their bearer token
+        headers=headers), 'Katsu Donors')
     donors = r['items']
 
     # Filter on excluded cohorts
