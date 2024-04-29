@@ -94,12 +94,14 @@ def get_summary_stats(donors, headers):
     treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
     treatment_type_count = {}
     for treatment in treatments:
-        if treatment["submitter_donor_id"] in donors_by_id:
+        if (treatment["submitter_donor_id"] in donors_by_id and
+            "treatment_type" in treatment and
+            treatment["treatment_type"] is not None):
             try:
                 for treatment_type in treatment["treatment_type"]:
                     add_or_increment(treatment_type_count, treatment_type)
             except TypeError as e:
-                print(e)
+                print(f"Could not grab summary treatment stats: {e}")
                 pass
 
     return {
