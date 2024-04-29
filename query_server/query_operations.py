@@ -409,7 +409,7 @@ def discovery_programs():
         'programs': r
     }
 
-    return ret_val, 200
+    return fix_dicts(ret_val), 200
 
 @app.route('/discovery/query')
 def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
@@ -485,5 +485,4 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
                     add_or_increment(summary_stats[mapping[0]], item)
             else:
                 add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
-
-    return summary_stats, 200
+    return fix_dicts(summary_stats), 200
