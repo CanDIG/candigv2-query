@@ -147,6 +147,14 @@ def query_htsget_pos(headers, assembly, chrom, start=0, end=10000000):
         headers=headers,
         json=payload), 'HTSGet position')
 
+# Figure out whether to use gene search or position search
+def query_htsget(headers, gene, assembly, chrom):
+    if gene != "":
+        return query_htsget_gene(headers, gene)
+    else:
+        search = re.search('(chr)*([XY0-9]{2}):(\d+)-(\d+)', chrom)
+        return query_htsget_pos(headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
+
 # The return value does not like None being used as a key, so this helper function recursively
 # goes through the dictionary provided, and changes all keys to strings
 # NB: This overwrites any keys that were previously not strings, and can cause data deletion
@@ -211,11 +219,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     # genomic_query_info = None
     if gene != "" or chrom != "":
         try:
-            if gene != "":
-                htsget = query_htsget_gene(headers, gene)
-            else:
-                search = re.search('(chr)*([XY0-9]{2}):(\d+)-(\d+)', chrom)
-                htsget = query_htsget_pos(headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
+            htsget = query_htsget(headers, gene, assembly, chrom)
 
             # We need to be able to map specimens, so we'll grab it from Katsu
             specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=headers)
@@ -309,18 +313,22 @@ def genomic_completeness():
     headers["X-Service-Token"] = config.SERVICE_TOKEN
 
     params = { 'page_size': PAGE_SIZE }
-    url = f"{config.KATSU_URL}/v2/authorized/sample_registrations/"
+    url = f"{config.KATSU_URL}/v2/explorer/donors/"
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
         # Reuse their bearer token
-        headers=request.headers), 'Katsu sample registrations')
-    samples = r['items']
+        headers=headers), 'Katsu explorer donors')
+    # First, we need to map all Katsu-identified specimens
+    samples_mapping = {}
+    for donor in r:
+        if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
+            for sample_id in donor['submitter_sample_ids']:
+                samples_mapping[sample_id] = donor['program_id']
 
     retVal = {}
-    for sample in samples:
-        program_id = sample['program_id']
+    for sample_id in samples_mapping.keys():
+        program_id = samples_mapping[sample_id]
         if program_id not in retVal:
             retVal[program_id] = { 'genomes': 0, 'transcriptomes': 0, 'all': 0 }
-        sample_id = sample['submitter_sample_id']
 
         # Check with HTSGet to see whether or not this sample is complete
         r = requests.get(f"{config.HTSGET_URL}/htsget/v1/samples/{sample_id}",
@@ -411,3 +419,80 @@ def discovery_programs():
     }
 
     return ret_val, 200
+
+@app.route('/discovery/query')
+def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+    url = f"{config.KATSU_URL}/v2/explorer/donors/"
+    headers = {}
+    for k in request.headers.keys():
+        headers[k] = request.headers[k]
+    headers["X-Service-Token"] = config.SERVICE_TOKEN
+
+    param_mapping = [
+        (treatment, "treatment_type"),
+        (primary_site, "primary_site"),
+        (chemotherapy, "chemotherapy_drug_name"),
+        (immunotherapy, "immunotherapy_drug_name"),
+        (hormone_therapy, "hormone_therapy_drug_name"),
+        (exclude_cohorts, "exclude_cohorts")
+    ]
+    params = {}
+    for param in param_mapping:
+        if param[0] == "" or param[0] == []:
+            continue
+        params[param[1]] = param[0]
+
+    full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
+    donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
+
+    # Cross reference with HTSGet, if necessary
+    if gene != "" or chrom != "":
+        # First, we need to map all Katsu-identified specimens
+        specimen_mapping = {}
+        for donor in donors:
+            if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
+                for sample_id in donor['submitter_sample_ids']:
+                    specimen_mapping[f"{donor['program_id']}~{sample_id}"] = donor
+
+        try:
+            htsget = query_htsget(headers, gene, assembly, chrom)
+
+            htsget_found_donors = {}
+            for program_id in htsget['query_info']:
+                for sample_id in htsget['query_info'][program_id]:
+                    # NB: We're allowing the entire donor as long as any specimen matches -- is that what we want?
+                    merged_id = f"{program_id}~{sample_id}"
+                    if merged_id in specimen_mapping:
+                        found_donor = specimen_mapping[merged_id]
+                        htsget_found_donors[f"{found_donor['program_id']}~{found_donor['submitter_donor_id']}"] = 1
+                    else:
+                        print(f"Could not find specimen identified in HTSGet: {merged_id}")
+            # Filter clinical results based on genomic results
+            donors = [donor for donor in donors if f"{donor['program_id']}~{donor['submitter_donor_id']}" in htsget_found_donors]
+
+        except Exception as ex:
+            print(f"Error while querying HTSGet: {ex}")
+
+    # Assemble summary statistics
+    # NB: Do we need this split up into site-vs-program as well?
+    summary_stats = {
+        'age_at_diagnosis': {},
+        'treatment_type_count': {},
+        'cancer_type_count': {},
+        'patients_per_cohort': {}
+    }
+    summary_stat_mapping = [
+        ('age_at_diagnosis', 'age_at_diagnosis'),
+        ('treatment_type_count', 'treatment_type'),
+        ('patients_per_cohort', 'program_id'),
+        ('cancer_type_count', 'primary_site')
+    ]
+    for donor in donors:
+        for mapping in summary_stat_mapping:
+            if type(donor[mapping[1]]) is list:
+                for item in donor[mapping[1]]:
+                    add_or_increment(summary_stats[mapping[0]], item)
+            else:
+                add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
+
+    return summary_stats, 200
