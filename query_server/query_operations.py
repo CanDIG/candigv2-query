@@ -276,7 +276,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                         genomic_query.append(case_data)
 
         except Exception as ex:
-            print(ex)
+            print(f"Error while reading HTSGet response: {ex}")
 
     # TODO: Cache the above list of donor IDs and summary statistics
     summary_stats = get_summary_stats(donors, headers)
