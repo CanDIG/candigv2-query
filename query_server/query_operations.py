@@ -295,23 +295,12 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     summary_stats = get_summary_stats(donors, headers)
 
     # Determine which part of the filtered donors to send back
-    ret_donors = [donor['submitter_donor_id'] for donor in donors[(page*page_size):((page+1)*page_size)]]
-    ret_programs = [donor['program_id'] for donor in donors[(page*page_size):((page+1)*page_size)]]
-    full_data = {'results' : []}
-    if len(donors) > 0:
-        for i, donor_id in enumerate(ret_donors):
-            donor_id_url = urllib.parse.quote(donor_id)
-            program_id_url = urllib.parse.quote(ret_programs[i])
-            r = timed_request(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
-                headers=headers)
-            full_data['results'].append(safe_get_request_json(r, 'Katsu donor clinical data'))
-    else:
-        full_data = {'results': []}
-    full_data['genomic'] = genomic_query
-    full_data['count'] = len(donors)
-    full_data['summary'] = summary_stats
-    full_data['next'] = None
-    full_data['prev'] = None
+    full_data = {
+        'results': [donor for donor in donors[(page*page_size):((page+1)*page_size)]],
+        'genomic': genomic_query,
+        'count': len(donors),
+        'summary': summary_stats
+    }
     # full_data['genomic_query_info'] = genomic_query_info
 
     # Add prev and next parameters to the repsonse, appending a session ID.
