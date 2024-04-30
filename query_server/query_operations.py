@@ -43,7 +43,7 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers):
             param_name: parameter,
             'page_size': PAGE_SIZE
         }
-        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
+        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters, doseq=True)}", headers=headers)
         results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
     return permissible_donors
@@ -176,7 +176,7 @@ def fix_dicts(to_fix):
         return to_fix
 
 @app.route('/query')
-def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
+def query(treatment=[], primary_site=[], chemotherapy=[], immunotherapy=[], hormone_therapy=[], chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
     # Add a service token to the headers so that other services will know this is from the query service:
     headers = {}
     for k in request.headers.keys():
@@ -189,7 +189,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     # Query the appropriate Katsu endpoint
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/authorized/donors/"
-    if primary_site != "":
+    if len(primary_site) > 0:
         params['primary_site'] = primary_site
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params, True)}",
         # Reuse their bearer token
@@ -207,7 +207,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         (hormone_therapy, f"{config.KATSU_URL}/v2/authorized/hormone_therapies/", 'drug_name')
     ]
     for (this_filter, url, param_name) in filters:
-        if this_filter != "":
+        if len(this_filter) > 0:
             permissible_donors = get_donors_from_katsu(
                 url,
                 param_name,
@@ -412,7 +412,7 @@ def discovery_programs():
     return fix_dicts(ret_val), 200
 
 @app.route('/discovery/query')
-def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+def discovery_query(treatment=[], primary_site=[], chemotherapy=[], immunotherapy=[], hormone_therapy=[], chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
     url = f"{config.KATSU_URL}/v2/explorer/donors/"
     headers = {}
     for k in request.headers.keys():
@@ -429,9 +429,10 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
     ]
     params = {}
     for param in param_mapping:
-        if param[0] == "" or param[0] == []:
+        if len(param[0]) == 0:
             continue
         params[param[1]] = param[0]
+    print(params)
 
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
     donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')

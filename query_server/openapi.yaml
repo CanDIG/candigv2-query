@@ -111,40 +111,40 @@ components:
         treatmentParam:
             in: query
             name: treatment
-            description: A comma-separated list of treatments to look for
-            example: Bone marrow transplant,Chemotherapy
+            description: A list of treatments to look for
+            example: Bone marrow transplant
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         primarySiteParam:
             in: query
             name: primary_site
-            description: A comma-separated list of affected primary sites to look for
-            example: Adrenal gland,Bladder
+            description: A list of affected primary sites to look for
+            example: Adrenal gland
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         chemotherapyParam:
             in: query
             name: chemotherapy
-            description: A comma-separated list of chemotherapy treatments to look for
-            example: FLUOROURACIL,LEUCOVORIN
+            description: A list of chemotherapy treatments to look for
+            example: FLUOROURACIL
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         immunotherapyParam:
             in: query
             name: immunotherapy
-            description: A comma-separated list of immunotherapy treatments to look for
-            example: Necitumumab,Pembrolizumab
+            description: A list of immunotherapy treatments to look for
+            example: Necitumumab
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         hormoneTherapyParam:
             in: query
             name: hormone_therapy
-            description: A comma-separated list of hormone therapy treatments to look for
-            example: Goserelin,Leuprolide
+            description: A list of hormone therapy treatments to look for
+            example: Goserelin
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
@@ -209,7 +209,6 @@ components:
             description: Acceptable requested fields for querying
             items:
                 type: string
-            example: [Bone marrow transplant, Chemotherapy]
         Field:
             type: string
             description: Acceptable requested string for querying

@@ -1,7 +1,8 @@
-Flask==2.2.5
-Flask-Cors==3.0.10
-pytest==7.2.0
-connexion==2.14.2
+Flask==3.0.3
+Flask-Cors==4.0.0
+pytest==8.2.0
+connexion[Flask]
 uwsgi==2.0.23
-swagger-ui-bundle==0.0.9
+swagger-ui-bundle==1.1.0
 candigv2-authx@git+https://github.com/CanDIG/candigv2-authx.git@daisieh/aud
+Cmake==3.29.2
