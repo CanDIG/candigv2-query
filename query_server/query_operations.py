@@ -94,12 +94,14 @@ def get_summary_stats(donors, headers):
     treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
     treatment_type_count = {}
     for treatment in treatments:
-        if treatment["submitter_donor_id"] in donors_by_id:
+        if (treatment["submitter_donor_id"] in donors_by_id and
+            "treatment_type" in treatment and
+            treatment["treatment_type"] is not None):
             try:
                 for treatment_type in treatment["treatment_type"]:
                     add_or_increment(treatment_type_count, treatment_type)
             except TypeError as e:
-                print(e)
+                print(f"Could not grab summary treatment stats: {e}")
                 pass
 
     return {
@@ -274,29 +276,18 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                         genomic_query.append(case_data)
 
         except Exception as ex:
-            print(ex)
+            print(f"Error while reading HTSGet response: {ex}")
 
     # TODO: Cache the above list of donor IDs and summary statistics
     summary_stats = get_summary_stats(donors, headers)
 
     # Determine which part of the filtered donors to send back
-    ret_donors = [donor['submitter_donor_id'] for donor in donors[(page*page_size):((page+1)*page_size)]]
-    ret_programs = [donor['program_id'] for donor in donors[(page*page_size):((page+1)*page_size)]]
-    full_data = {'results' : []}
-    if len(donors) > 0:
-        for i, donor_id in enumerate(ret_donors):
-            donor_id_url = urllib.parse.quote(donor_id)
-            program_id_url = urllib.parse.quote(ret_programs[i])
-            r = requests.get(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
-                headers=headers)
-            full_data['results'].append(safe_get_request_json(r, 'Katsu donor clinical data'))
-    else:
-        full_data = {'results': []}
-    full_data['genomic'] = genomic_query
-    full_data['count'] = len(donors)
-    full_data['summary'] = summary_stats
-    full_data['next'] = None
-    full_data['prev'] = None
+    full_data = {
+        'results': [donor for donor in donors[(page*page_size):((page+1)*page_size)]],
+        'genomic': genomic_query,
+        'count': len(donors),
+        'summary': summary_stats
+    }
     # full_data['genomic_query_info'] = genomic_query_info
 
     # Add prev and next parameters to the repsonse, appending a session ID.
@@ -418,7 +409,7 @@ def discovery_programs():
         'programs': r
     }
 
-    return ret_val, 200
+    return fix_dicts(ret_val), 200
 
 @app.route('/discovery/query')
 def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
@@ -494,5 +485,4 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
                     add_or_increment(summary_stats[mapping[0]], item)
             else:
                 add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
-
-    return summary_stats, 200
+    return fix_dicts(summary_stats), 200
