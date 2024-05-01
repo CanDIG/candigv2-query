@@ -303,37 +303,21 @@ def genomic_completeness():
         headers[k] = request.headers[k]
     headers["X-Service-Token"] = config.SERVICE_TOKEN
 
-    params = { 'page_size': PAGE_SIZE }
-    url = f"{config.KATSU_URL}/v2/explorer/donors/"
-    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
-        # Reuse their bearer token
-        headers=headers), 'Katsu explorer donors')
-    # First, we need to map all Katsu-identified specimens
-    samples_mapping = {}
-    for donor in r:
-        if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
-            for sample_id in donor['submitter_sample_ids']:
-                samples_mapping[sample_id] = donor['program_id']
+    samples = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/htsget/v1/samples",
+            # Reuse their bearer token
+            headers=headers), 'HTSGet cohort statistics')
 
     retVal = {}
-    for sample_id in samples_mapping.keys():
-        program_id = samples_mapping[sample_id]
+    for sample in samples:
+        program_id = sample['cohort']
         if program_id not in retVal:
             retVal[program_id] = { 'genomes': 0, 'transcriptomes': 0, 'all': 0 }
-
-        # Check with HTSGet to see whether or not this sample is complete
-        r = requests.get(f"{config.HTSGET_URL}/htsget/v1/samples/{sample_id}",
-            # Reuse their bearer token
-            headers=headers)
-        if r.ok:
-            r_json = r.json()
-            retVal[program_id]
-            if len(r_json['genomes']) > 0 and len(r_json['transcriptomes']) > 0:
-                retVal[program_id]['all'] += 1
-            if len(r_json['genomes']) > 0:
-                retVal[program_id]['genomes'] += 1
-            if len(r_json['transcriptomes']) > 0:
-                retVal[program_id]['transcriptomes'] += 1
+        if len(sample['genomes']) > 0 and len(sample['transcriptomes']) > 0:
+            retVal[program_id]['all'] += 1
+        if len(sample['genomes']) > 0:
+            retVal[program_id]['genomes'] += 1
+        if len(sample['transcriptomes']) > 0:
+            retVal[program_id]['transcriptomes'] += 1
 
     return retVal, 200
 
