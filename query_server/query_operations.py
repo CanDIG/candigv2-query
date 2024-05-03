@@ -469,4 +469,10 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
                     add_or_increment(summary_stats[mapping[0]], item)
             else:
                 add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
+
+    # Censor if necessary
+    for stat in summary_stats:
+        if summary_stats[stat] < config.AGGREGATE_COUNT_THRESHOLD:
+            summary_stats[stat] = "<" + config.AGGREGATE_COUNT_THRESHOLD
+
     return fix_dicts(summary_stats), 200
