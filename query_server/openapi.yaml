@@ -81,46 +81,75 @@ paths:
                                 $ref: '#/components/schemas/DiscoveryProgramBody'
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
+    /discovery/query:
+        get:
+            summary: Retrieve summary statistics on the metadata for each program that match the given query parameters.
+            description: Retrieve summary statistics on the metadata for each program that match the given query parameters.
+            operationId: query_operations.discovery_query
+            parameters:
+                - $ref: "#/components/parameters/treatmentParam"
+                - $ref: "#/components/parameters/primarySiteParam"
+                - $ref: "#/components/parameters/chemotherapyParam"
+                - $ref: "#/components/parameters/immunotherapyParam"
+                - $ref: "#/components/parameters/hormoneTherapyParam"
+                - $ref: "#/components/parameters/chrParam"
+                - $ref: "#/components/parameters/geneParam"
+                - $ref: "#/components/parameters/assemblyParam"
+                - $ref: "#/components/parameters/excludeCohortsParam"
+            responses:
+                200:
+                    description: Summary statistics
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscoveryProgramBody'
+                5XX:
+                    $ref: "#/components/responses/5xxServerError"
                     
 components:
     parameters:
         treatmentParam:
             in: query
             name: treatment
-            description: A comma-separated list of treatments to look for
-            example: Bone marrow transplant,Chemotherapy
+            style: pipeDelimited
+            description: A pipe-separated list of treatments to look for
+            example: Bone marrow transplant|Chemotherapy
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         primarySiteParam:
             in: query
             name: primary_site
-            description: A comma-separated list of affected primary sites to look for
-            example: Adrenal gland,Bladder
+            style: pipeDelimited
+            description: A pipe-separated list of affected primary sites to look for
+            example: Adrenal gland|Bladder
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         chemotherapyParam:
             in: query
             name: chemotherapy
-            description: A comma-separated list of chemotherapy treatments to look for
-            example: FLUOROURACIL,LEUCOVORIN
+            style: pipeDelimited
+            description: A pipe-separated list of chemotherapy treatments to look for
+            example: FLUOROURACIL|LEUCOVORIN
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         immunotherapyParam:
             in: query
             name: immunotherapy
-            description: A comma-separated list of immunotherapy treatments to look for
-            example: Necitumumab,Pembrolizumab
+            style: pipeDelimited
+            description: A pipe-separated list of immunotherapy treatments to look for
+            example: Necitumumab|Pembrolizumab
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         hormoneTherapyParam:
             in: query
             name: hormone_therapy
-            description: A comma-separated list of hormone therapy treatments to look for
-            example: Goserelin,Leuprolide
+            style: pipeDelimited
+            description: A pipe-separated list of hormone therapy treatments to look for
+            example: Goserelin|Leuprolide
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'

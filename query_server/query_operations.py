@@ -94,9 +94,15 @@ def get_summary_stats(donors, headers):
     treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
     treatment_type_count = {}
     for treatment in treatments:
-        if treatment["submitter_donor_id"] in donors_by_id:
-            for treatment_type in treatment["treatment_type"]:
-                add_or_increment(treatment_type_count, treatment_type)
+        if (treatment["submitter_donor_id"] in donors_by_id and
+            "treatment_type" in treatment and
+            treatment["treatment_type"] is not None):
+            try:
+                for treatment_type in treatment["treatment_type"]:
+                    add_or_increment(treatment_type_count, treatment_type)
+            except TypeError as e:
+                print(f"Could not grab summary treatment stats: {e}")
+                pass
 
     return {
         'age_at_diagnosis': age_at_diagnosis,
@@ -143,6 +149,14 @@ def query_htsget_pos(headers, assembly, chrom, start=0, end=10000000):
         headers=headers,
         json=payload), 'HTSGet position')
 
+# Figure out whether to use gene search or position search
+def query_htsget(headers, gene, assembly, chrom):
+    if gene != "":
+        return query_htsget_gene(headers, gene)
+    else:
+        search = re.search('(chr)*([XY0-9]{2}):(\d+)-(\d+)', chrom)
+        return query_htsget_pos(headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
+
 # The return value does not like None being used as a key, so this helper function recursively
 # goes through the dictionary provided, and changes all keys to strings
 # NB: This overwrites any keys that were previously not strings, and can cause data deletion
@@ -176,8 +190,8 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/authorized/donors/"
     if primary_site != "":
-        params['primary_site'] = ",".join(primary_site)
-    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
+        params['primary_site'] = primary_site
+    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params, True)}",
         # Reuse their bearer token
         headers=headers), 'Katsu Donors')
     donors = r['items']
@@ -207,11 +221,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     # genomic_query_info = None
     if gene != "" or chrom != "":
         try:
-            if gene != "":
-                htsget = query_htsget_gene(headers, gene)
-            else:
-                search = re.search('(chr)*([XY0-9]{2}):(\d+)-(\d+)', chrom)
-                htsget = query_htsget_pos(headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
+            htsget = query_htsget(headers, gene, assembly, chrom)
 
             # We need to be able to map specimens, so we'll grab it from Katsu
             specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=headers)
@@ -266,29 +276,18 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                         genomic_query.append(case_data)
 
         except Exception as ex:
-            print(ex)
+            print(f"Error while reading HTSGet response: {ex}")
 
     # TODO: Cache the above list of donor IDs and summary statistics
     summary_stats = get_summary_stats(donors, headers)
 
     # Determine which part of the filtered donors to send back
-    ret_donors = [donor['submitter_donor_id'] for donor in donors[(page*page_size):((page+1)*page_size)]]
-    ret_programs = [donor['program_id'] for donor in donors[(page*page_size):((page+1)*page_size)]]
-    full_data = {'results' : []}
-    if len(donors) > 0:
-        for i, donor_id in enumerate(ret_donors):
-            donor_id_url = urllib.parse.quote(donor_id)
-            program_id_url = urllib.parse.quote(ret_programs[i])
-            r = requests.get(f"{config.KATSU_URL}/v2/authorized/donor_with_clinical_data/program/{program_id_url}/donor/{donor_id_url}",
-                headers=headers)
-            full_data['results'].append(safe_get_request_json(r, 'Katsu donor clinical data'))
-    else:
-        full_data = {'results': []}
-    full_data['genomic'] = genomic_query
-    full_data['count'] = len(donors)
-    full_data['summary'] = summary_stats
-    full_data['next'] = None
-    full_data['prev'] = None
+    full_data = {
+        'results': [donor for donor in donors[(page*page_size):((page+1)*page_size)]],
+        'genomic': genomic_query,
+        'count': len(donors),
+        'summary': summary_stats
+    }
     # full_data['genomic_query_info'] = genomic_query_info
 
     # Add prev and next parameters to the repsonse, appending a session ID.
@@ -304,33 +303,21 @@ def genomic_completeness():
         headers[k] = request.headers[k]
     headers["X-Service-Token"] = config.SERVICE_TOKEN
 
-    params = { 'page_size': PAGE_SIZE }
-    url = f"{config.KATSU_URL}/v2/authorized/sample_registrations/"
-    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params)}",
-        # Reuse their bearer token
-        headers=request.headers), 'Katsu sample registrations')
-    samples = r['items']
+    samples = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/htsget/v1/samples",
+            # Reuse their bearer token
+            headers=headers), 'HTSGet cohort statistics')
 
     retVal = {}
     for sample in samples:
-        program_id = sample['program_id']
+        program_id = sample['cohort']
         if program_id not in retVal:
             retVal[program_id] = { 'genomes': 0, 'transcriptomes': 0, 'all': 0 }
-        sample_id = sample['submitter_sample_id']
-
-        # Check with HTSGet to see whether or not this sample is complete
-        r = requests.get(f"{config.HTSGET_URL}/htsget/v1/samples/{sample_id}",
-            # Reuse their bearer token
-            headers=headers)
-        if r.ok:
-            r_json = r.json()
-            retVal[program_id]
-            if len(r_json['genomes']) > 0 and len(r_json['transcriptomes']) > 0:
-                retVal[program_id]['all'] += 1
-            if len(r_json['genomes']) > 0:
-                retVal[program_id]['genomes'] += 1
-            if len(r_json['transcriptomes']) > 0:
-                retVal[program_id]['transcriptomes'] += 1
+        if len(sample['genomes']) > 0 and len(sample['transcriptomes']) > 0:
+            retVal[program_id]['all'] += 1
+        if len(sample['genomes']) > 0:
+            retVal[program_id]['genomes'] += 1
+        if len(sample['transcriptomes']) > 0:
+            retVal[program_id]['transcriptomes'] += 1
 
     return retVal, 200
 
@@ -345,7 +332,11 @@ def discovery_programs():
         'schemas_used': set(),
         'schemas_not_used': set(),
         'required_but_missing': {},
-        'cases_missing_data': set()
+        'cases_missing_data': set(),
+        'summary_cases': {
+            'total_cases': 0,
+            'complete_cases': 0
+        }
     }
     unused_schemas = set()
     unused_initialized = False
@@ -360,21 +351,35 @@ def discovery_programs():
         if not unused_initialized:
             unused_initialized = True
             unused_schemas = set(metadata['schemas_not_used'])
-        site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
-        site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
+        if 'schemas_used' in metadata:
+            site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
+        if 'cases_missing_data' in metadata:
+            site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
+        if 'summary_cases' in metadata:
+            try:
+                site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
+                site_summary_stats['summary_cases']['total_cases'] += metadata['summary_cases']['total_cases']
+            except:
+                print(f"Strange result from Katsu: unreadable summary_cases in {program} metadata")
 
+        if 'required_but_missing' not in metadata:
+            # Unreadable result; we cannot continue
+            continue
         required_but_missing = metadata['required_but_missing']
-        for field in required_but_missing:
-            # Assuming these are of the form 'treatment_setting': {'total': 1, 'missing': 0}
-            if field in site_summary_stats['required_but_missing']:
-                for category in required_but_missing[field]:
-                    if category in site_summary_stats['required_but_missing'][field]:
-                        for instance in required_but_missing[field][category]:
-                            site_summary_stats['required_but_missing'][field][category][instance] += required_but_missing[field][category][instance]
-                    else:
-                        site_summary_stats['required_but_missing'][field][category] = copy.deepcopy(required_but_missing[field][category])
-            else:
-                site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
+        try:
+            for field in required_but_missing:
+                # Assuming these are of the form 'treatment_setting': {'total': 1, 'missing': 0}
+                if field in site_summary_stats['required_but_missing']:
+                    for category in required_but_missing[field]:
+                        if category in site_summary_stats['required_but_missing'][field]:
+                            for instance in required_but_missing[field][category]:
+                                site_summary_stats['required_but_missing'][field][category][instance] += required_but_missing[field][category][instance]
+                        else:
+                            site_summary_stats['required_but_missing'][field][category] = copy.deepcopy(required_but_missing[field][category])
+                else:
+                    site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
+        except Exception as ex:
+            print(f"Unable to parse required fields result from Katsu: {ex}")
 
     for schema in site_summary_stats['schemas_used']:
         unused_schemas.discard(schema)
@@ -388,4 +393,80 @@ def discovery_programs():
         'programs': r
     }
 
-    return ret_val, 200
+    return fix_dicts(ret_val), 200
+
+@app.route('/discovery/query')
+def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+    url = f"{config.KATSU_URL}/v2/explorer/donors/"
+    headers = {}
+    for k in request.headers.keys():
+        headers[k] = request.headers[k]
+    headers["X-Service-Token"] = config.SERVICE_TOKEN
+
+    param_mapping = [
+        (treatment, "treatment_type"),
+        (primary_site, "primary_site"),
+        (chemotherapy, "chemotherapy_drug_name"),
+        (immunotherapy, "immunotherapy_drug_name"),
+        (hormone_therapy, "hormone_therapy_drug_name"),
+        (exclude_cohorts, "exclude_cohorts")
+    ]
+    params = {}
+    for param in param_mapping:
+        if param[0] == "" or param[0] == []:
+            continue
+        params[param[1]] = param[0]
+
+    full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
+    donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
+
+    # Cross reference with HTSGet, if necessary
+    if gene != "" or chrom != "":
+        # First, we need to map all Katsu-identified specimens
+        specimen_mapping = {}
+        for donor in donors:
+            if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
+                for sample_id in donor['submitter_sample_ids']:
+                    specimen_mapping[f"{donor['program_id']}~{sample_id}"] = donor
+
+        try:
+            htsget = query_htsget(headers, gene, assembly, chrom)
+
+            htsget_found_donors = {}
+            for program_id in htsget['query_info']:
+                for sample_id in htsget['query_info'][program_id]:
+                    # NB: We're allowing the entire donor as long as any specimen matches -- is that what we want?
+                    merged_id = f"{program_id}~{sample_id}"
+                    if merged_id in specimen_mapping:
+                        found_donor = specimen_mapping[merged_id]
+                        htsget_found_donors[f"{found_donor['program_id']}~{found_donor['submitter_donor_id']}"] = 1
+                    else:
+                        print(f"Could not find specimen identified in HTSGet: {merged_id}")
+            # Filter clinical results based on genomic results
+            donors = [donor for donor in donors if f"{donor['program_id']}~{donor['submitter_donor_id']}" in htsget_found_donors]
+
+        except Exception as ex:
+            print(f"Error while querying HTSGet: {ex}")
+
+    # Assemble summary statistics
+    # NB: Do we need this split up into site-vs-program as well?
+    summary_stats = {
+        'age_at_diagnosis': {},
+        'treatment_type_count': {},
+        'cancer_type_count': {},
+        'patients_per_cohort': {}
+    }
+    summary_stat_mapping = [
+        ('age_at_diagnosis', 'age_at_diagnosis'),
+        ('treatment_type_count', 'treatment_type'),
+        ('patients_per_cohort', 'program_id'),
+        ('cancer_type_count', 'primary_site')
+    ]
+    for donor in donors:
+        for mapping in summary_stat_mapping:
+            if type(donor[mapping[1]]) is list:
+                for item in donor[mapping[1]]:
+                    add_or_increment(summary_stats[mapping[0]], item)
+            else:
+                add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
+    return fix_dicts(summary_stats), 200
