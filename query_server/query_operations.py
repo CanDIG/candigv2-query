@@ -154,7 +154,7 @@ def query_htsget(headers, gene, assembly, chrom):
     if gene != "":
         return query_htsget_gene(headers, gene)
     else:
-        search = re.search('(chr)*([XY0-9]{1}|[XY0-9]{2}):(\d+)-(\d+)', chrom)
+        search = re.search(r'(chr)*([XY0-9]{1,2}):(\d+)-(\d+)', chrom)
         return query_htsget_pos(headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
 
 # The return value does not like None being used as a key, so this helper function recursively
