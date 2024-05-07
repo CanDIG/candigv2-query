@@ -43,7 +43,7 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers):
             param_name: parameter,
             'page_size': PAGE_SIZE
         }
-        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
+        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters, doseq=True)}", headers=headers)
         results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
     return permissible_donors
@@ -176,7 +176,7 @@ def fix_dicts(to_fix):
         return to_fix
 
 @app.route('/query')
-def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
+def query(treatment=[], primary_site=[], chemotherapy=[], immunotherapy=[], hormone_therapy=[], chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
     # Add a service token to the headers so that other services will know this is from the query service:
     headers = {}
     for k in request.headers.keys():
@@ -189,9 +189,9 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     # Query the appropriate Katsu endpoint
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/authorized/donors/"
-    if primary_site != "":
+    if len(primary_site) > 0:
         params['primary_site'] = primary_site
-    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params, True)}",
+    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params, doseq=True)}",
         # Reuse their bearer token
         headers=headers), 'Katsu Donors')
     donors = r['items']
@@ -207,7 +207,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         (hormone_therapy, f"{config.KATSU_URL}/v2/authorized/hormone_therapies/", 'drug_name')
     ]
     for (this_filter, url, param_name) in filters:
-        if this_filter != "":
+        if len(this_filter) > 0:
             permissible_donors = get_donors_from_katsu(
                 url,
                 param_name,
@@ -238,42 +238,46 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             # for cohort in genomic_query_info:
             #    sample_ids = genomic_query_info[cohort]
 
-            htsget_found_donors = {}
-            for response in htsget['response']:
-                for case_data in response['caseLevelData']:
-                    if 'biosampleId' not in case_data:
-                        print(f"Could not parse htsget response for {case_data}")
-                        continue
-                    id = case_data['biosampleId'].split('~')
-                    if len(id) > 1:
-                        case_data['program_id'] = id[0]
-                        submitter_specimen_id = id[1]
-                        case_data['submitter_specimen_id'] = submitter_specimen_id
-                        if submitter_specimen_id in specimen_mapping:
-                            case_data['donor_id'] = specimen_mapping[submitter_specimen_id][0]
-                            case_data['tumour_normal_designation'] = specimen_mapping[submitter_specimen_id][1]
+            if 'response' in htsget:
+                htsget_found_donors = {}
+                for response in htsget['response']:
+                    for case_data in response['caseLevelData']:
+                        if 'biosampleId' not in case_data:
+                            print(f"Could not parse htsget response for {case_data}")
+                            continue
+                        id = case_data['biosampleId'].split('~')
+                        if len(id) > 1:
+                            case_data['program_id'] = id[0]
+                            submitter_specimen_id = id[1]
+                            case_data['submitter_specimen_id'] = submitter_specimen_id
+                            if submitter_specimen_id in specimen_mapping:
+                                case_data['donor_id'] = specimen_mapping[submitter_specimen_id][0]
+                                case_data['tumour_normal_designation'] = specimen_mapping[submitter_specimen_id][1]
+                            else:
+                                print(f"Could not find donor mapping for {case_data}")
+                                case_data['donor_id'] = submitter_specimen_id
+                                case_data['tumour_normal_designation'] = 'Tumour'
+                            htsget_found_donors[case_data['donor_id']] = 1
                         else:
-                            print(f"Could not find donor mapping for {case_data}")
-                            case_data['donor_id'] = submitter_specimen_id
+                            print(f"Could not parse biosampleId for {case_data}")
+                            case_data['program_id'] = None
+                            case_data['donor_id'] = None
+                            case_data['submitter_specimen_id'] = case_data['biosampleId']
                             case_data['tumour_normal_designation'] = 'Tumour'
-                        htsget_found_donors[case_data['donor_id']] = 1
-                    else:
-                        print(f"Could not parse biosampleId for {case_data}")
-                        case_data['program_id'] = None
-                        case_data['donor_id'] = None
-                        case_data['submitter_specimen_id'] = case_data['biosampleId']
-                        case_data['tumour_normal_designation'] = 'Tumour'
-                    case_data['position'] = response['variation']['location']['interval']['start']['value']
-            # Filter clinical results based on genomic results
-            donors = [donor for donor in donors if donor['submitter_donor_id'] in htsget_found_donors]
-            katsu_allowed_donors = {}
-            for donor in donors:
-                katsu_allowed_donors[f"{donor['program_id']}~{donor['submitter_donor_id']}"] = 1
-            for response in htsget['response']:
-                for case_data in response['caseLevelData']:
-                    if ('donor_id' in case_data and 'program_id' in case_data and
-                        f"{case_data['program_id']}~{case_data['donor_id']}" in katsu_allowed_donors):
-                        genomic_query.append(case_data)
+                        case_data['position'] = response['variation']['location']['interval']['start']['value']
+                # Filter clinical results based on genomic results
+                donors = [donor for donor in donors if donor['submitter_donor_id'] in htsget_found_donors]
+                katsu_allowed_donors = {}
+                for donor in donors:
+                    katsu_allowed_donors[f"{donor['program_id']}~{donor['submitter_donor_id']}"] = 1
+                for response in htsget['response']:
+                    for case_data in response['caseLevelData']:
+                        if ('donor_id' in case_data and 'program_id' in case_data and
+                            f"{case_data['program_id']}~{case_data['donor_id']}" in katsu_allowed_donors):
+                            genomic_query.append(case_data)
+            else:
+                # We needed a result from HTSGet, and got none: no donors have matched
+                donors = []
 
         except Exception as ex:
             print(f"Error while reading HTSGet response: {ex}")
