@@ -177,6 +177,7 @@ components:
             example: hg38
             schema:
                 $ref: '#/components/schemas/Field'
+                default: hg38
         excludeCohortsParam:
             in: query
             name: exclude_cohorts
