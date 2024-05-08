@@ -280,6 +280,8 @@ def query(treatment=[], primary_site=[], chemotherapy=[], immunotherapy=[], horm
                 donors = []
 
         except Exception as ex:
+            # Treat a Genomic Search with no valid response from HTSGet as an empty response
+            donors = []
             print(f"Error while reading HTSGet response: {ex}")
 
     # TODO: Cache the above list of donor IDs and summary statistics
