@@ -58,7 +58,7 @@ def get_summary_stats(donors, headers):
     # Perform (and cache) summary statistics
     age_at_diagnosis = {}
     donors_by_id = {}
-    cancer_type_count = {}
+    primary_site_count = {}
     patients_per_cohort = {}
     for donor in donors:
         # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
@@ -77,10 +77,10 @@ def get_summary_stats(donors, headers):
         # Cancer types
         if donor['primary_site']:
             for cancer_type in donor['primary_site']:
-                if cancer_type in cancer_type_count:
-                    cancer_type_count[cancer_type] += 1
+                if cancer_type in primary_site_count:
+                    primary_site_count[cancer_type] += 1
                 else:
-                    cancer_type_count[cancer_type] = 1
+                    primary_site_count[cancer_type] = 1
         program_id = donor['program_id']
         if program_id in patients_per_cohort:
             patients_per_cohort[program_id] += 1
@@ -107,7 +107,7 @@ def get_summary_stats(donors, headers):
     return {
         'age_at_diagnosis': age_at_diagnosis,
         'treatment_type_count': treatment_type_count,
-        'cancer_type_count': cancer_type_count,
+        'primary_site_count': primary_site_count,
         'patients_per_cohort': patients_per_cohort
     }
 
@@ -453,14 +453,14 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
     summary_stats = {
         'age_at_diagnosis': {},
         'treatment_type_count': {},
-        'cancer_type_count': {},
+        'primary_site_count': {},
         'patients_per_cohort': {}
     }
     summary_stat_mapping = [
         ('age_at_diagnosis', 'age_at_diagnosis'),
         ('treatment_type_count', 'treatment_type'),
         ('patients_per_cohort', 'program_id'),
-        ('cancer_type_count', 'primary_site')
+        ('primary_site_count', 'primary_site')
     ]
     for donor in donors:
         for mapping in summary_stat_mapping:
