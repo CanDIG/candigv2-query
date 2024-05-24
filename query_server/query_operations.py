@@ -157,6 +157,22 @@ def query_htsget(headers, gene, assembly, chrom):
         search = re.search(r'(chr)*([XY0-9]{1,2}):(\d+)-(\d+)', chrom)
         return query_htsget_pos(headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
 
+# Recursively deep search an object or list for any values less than the aggregate threshold
+# NB: does not handle tuples
+def censor_response(object):
+    if type(object) is list:
+        return [censor_response(value) for value in object]
+    elif isinstance(object, dict):
+        new_dict = {}
+        for key, val in object.items():
+            new_dict[key] = censor_response(val)
+        return new_dict
+    elif isinstance(object, int):
+        return f"<{config.AGGREGATE_COUNT_THRESHOLD}" if object < config.AGGREGATE_COUNT_THRESHOLD else object
+
+    # Unknown -- leave as-is
+    return object
+
 # The return value does not like None being used as a key, so this helper function recursively
 # goes through the dictionary provided, and changes all keys to strings
 # NB: This overwrites any keys that were previously not strings, and can cause data deletion
@@ -319,6 +335,8 @@ def genomic_completeness():
         if len(sample['transcriptomes']) > 0:
             retVal[program_id]['transcriptomes'] += 1
 
+    retVal = censor_response(retVal)
+
     return retVal, 200
 
 @app.route('/discovery/programs')
@@ -386,6 +404,9 @@ def discovery_programs():
     site_summary_stats['schemas_not_used'] = list(unused_schemas)
     site_summary_stats['schemas_used'] = list(site_summary_stats['schemas_used'])
     site_summary_stats['cases_missing_data'] = list(site_summary_stats['cases_missing_data'])
+
+    site_summary_stats = censor_response(site_summary_stats)
+    r = censor_response(r)
 
     # Return both the site's aggregated return value and each individual programs'
     ret_val = {
@@ -471,8 +492,6 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
                 add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
 
     # Censor if necessary
-    for stat in summary_stats:
-        if summary_stats[stat] < config.AGGREGATE_COUNT_THRESHOLD:
-            summary_stats[stat] = "<" + config.AGGREGATE_COUNT_THRESHOLD
+    summary_stats = censor_response(summary_stats)
 
     return fix_dicts(summary_stats), 200
