@@ -335,8 +335,6 @@ def genomic_completeness():
         if len(sample['transcriptomes']) > 0:
             retVal[program_id]['transcriptomes'] += 1
 
-    retVal = censor_response(retVal)
-
     return retVal, 200
 
 @app.route('/discovery/programs')
@@ -404,9 +402,6 @@ def discovery_programs():
     site_summary_stats['schemas_not_used'] = list(unused_schemas)
     site_summary_stats['schemas_used'] = list(site_summary_stats['schemas_used'])
     site_summary_stats['cases_missing_data'] = list(site_summary_stats['cases_missing_data'])
-
-    site_summary_stats = censor_response(site_summary_stats)
-    r = censor_response(r)
 
     # Return both the site's aggregated return value and each individual programs'
     ret_val = {
