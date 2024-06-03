@@ -105,6 +105,20 @@ paths:
                                 $ref: '#/components/schemas/DiscoveryProgramBody'
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
+    /whoami:
+        get:
+            summary: Retrieve the user key (usually the email) for the currently logged-in user
+            description: Retrieve the user key (usually the email) for the currently logged-in user
+            operationId: query_operations.whoami
+            responses:
+                200:
+                    description: User info
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserInfo'
+                5XX:
+                    $ref: "#/components/responses/5xxServerError"
                     
 components:
     parameters:
@@ -254,6 +268,13 @@ components:
                 programs:
                     type: array
                     description: Per-program summary statistics
+        UserInfo:
+            type: object
+            description: Information about a user
+            properties:
+                key:
+                    type: string
+                    description: The user key associated with this user. Usually an email
         # ERROR SCHEMAS
         Error:
             type: object

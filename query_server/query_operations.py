@@ -4,6 +4,7 @@ import re
 import requests
 import secrets
 import urllib
+from authx.auth import get_user_id, get_auth_token
 
 import config
 
@@ -490,3 +491,24 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
     summary_stats = censor_response(summary_stats)
 
     return fix_dicts(summary_stats), 200
+
+@app.route('/whoami')
+def whoami():
+    # Grab information about the currently logged-in user
+    print(config.OPA_URL)
+    print(config.AUTHZ)
+    token = get_auth_token(request)
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+    response = requests.post(
+        config.OPA_URL + f"/v1/data/idp/user_key",
+        headers=headers,
+        json={
+            "input": {
+                    "token": token
+                }
+            }
+        )
+    print(response)
+    return { 'key': get_user_id(request, opa_url = config.OPA_URL) }
