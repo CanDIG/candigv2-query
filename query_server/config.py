@@ -7,6 +7,7 @@ config.read(os.path.abspath(f"{os.path.dirname(os.path.realpath(__file__))}/../c
 
 AUTHZ = config['authz']
 QUERY_URL = os.getenv("QUERY_URL", f"http://localhost:{config['DEFAULT']['Port']}")
+AGGREGATE_COUNT_THRESHOLD = int(os.getenv("AGGREGATE_COUNT_THRESHOLD", "5"))
 
 PORT = config['DEFAULT']['Port']
 
