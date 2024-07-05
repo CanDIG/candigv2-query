@@ -194,6 +194,7 @@ components:
         excludeCohortsParam:
             in: query
             name: exclude_cohorts
+            style: pipeDelimited
             description: A list of cohorts that will be excluded from results
             example: SYNTHETIC-1
             schema:
