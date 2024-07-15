@@ -36,7 +36,7 @@ def safe_get_request_json(request, name):
     return request.json()
 
 # Grab a list of donors matching a given filter from the given URL
-def get_donors_from_katsu(url, param_name, parameter_list, headers):
+def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type=None):
     permissible_donors = set()
     for parameter in parameter_list:
         # TODO: Fix the page_size call here -- use a consume_all() query like in the frontend
@@ -44,6 +44,8 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers):
             param_name: parameter,
             'page_size': PAGE_SIZE
         }
+        if therapy_type != None:
+            parameters['systemic_therapy_type'] = therapy_type
         treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
         results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
@@ -218,18 +220,19 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
 
     # Will need to look into how to go about this -- ideally we implement this into the SQL in Katsu's side
     filters = [
-        (treatment, f"{config.KATSU_URL}/v2/authorized/treatments/", 'treatment_type'),
-        (chemotherapy, f"{config.KATSU_URL}/v2/authorized/chemotherapies/", 'drug_name'),
-        (immunotherapy, f"{config.KATSU_URL}/v2/authorized/immunotherapies/", 'drug_name'),
-        (hormone_therapy, f"{config.KATSU_URL}/v2/authorized/hormone_therapies/", 'drug_name')
+        (treatment, f"{config.KATSU_URL}/v2/authorized/treatments/", 'treatment_type', None),
+        (chemotherapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'chemotherapy'),
+        (immunotherapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'immunotherapy'),
+        (hormone_therapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'hormone therapy')
     ]
-    for (this_filter, url, param_name) in filters:
+    for (this_filter, url, param_name, therapy_type) in filters:
         if this_filter != "":
             permissible_donors = get_donors_from_katsu(
                 url,
                 param_name,
                 this_filter,
-                headers
+                headers,
+                therapy_type
             )
             donors = [donor for donor in donors if donor['submitter_donor_id'] in permissible_donors]
 
