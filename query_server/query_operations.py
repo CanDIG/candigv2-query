@@ -77,13 +77,13 @@ def get_summary_stats(donors, headers):
             else:
                 add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
-        # Cancer types
-        if donor['primary_site']:
-            for cancer_type in donor['primary_site']:
-                if cancer_type in primary_site_count:
-                    primary_site_count[cancer_type] += 1
-                else:
-                    primary_site_count[cancer_type] = 1
+        # primary sites
+        for primary_diagnosis in donor['primary_diagnosis']:
+            primary_site = primary_diagnosis['primary_site']
+            if primary_site in primary_site_count:
+                primary_site_count[primary_site] += 1
+            else:
+                primary_site_count[primary_site] = 1
         program_id = donor['program_id']
         if program_id in patients_per_cohort:
             patients_per_cohort[program_id] += 1
@@ -208,8 +208,6 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     # Query the appropriate Katsu endpoint
     params = { 'page_size': PAGE_SIZE }
     url = f"{config.KATSU_URL}/v2/authorized/donors/"
-    if primary_site != "":
-        params['primary_site'] = primary_site
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params, True)}",
         # Reuse their bearer token
         headers=headers), 'Katsu Donors')
@@ -223,7 +221,8 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         (treatment, f"{config.KATSU_URL}/v2/authorized/treatments/", 'treatment_type', None),
         (chemotherapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'chemotherapy'),
         (immunotherapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'immunotherapy'),
-        (hormone_therapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'hormone therapy')
+        (hormone_therapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'hormone therapy'),
+        (primary_site, f"{config.KATSU_URL}/v2/authorized/primary_diagnoses/", 'primary_site', None),
     ]
     for (this_filter, url, param_name, therapy_type) in filters:
         if this_filter != "":
