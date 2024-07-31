@@ -91,8 +91,8 @@ def get_summary_stats(donors, headers):
             patients_per_cohort[program_id] = 1
 
     # Treatment types
-    # http://candig.docker.internal:8008/v2/authorized/treatments/
-    treatments = requests.get(f"{config.KATSU_URL}/v2/authorized/treatments/?page_size={PAGE_SIZE}",
+    # http://candig.docker.internal:8008/v3/authorized/treatments/
+    treatments = requests.get(f"{config.KATSU_URL}/v3/authorized/treatments/?page_size={PAGE_SIZE}",
         headers=headers)
     treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
     treatment_type_count = {}
@@ -207,7 +207,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
 
     # Query the appropriate Katsu endpoint
     params = { 'page_size': PAGE_SIZE }
-    url = f"{config.KATSU_URL}/v2/authorized/donors/"
+    url = f"{config.KATSU_URL}/v3/authorized/donors/"
     r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params, True)}",
         # Reuse their bearer token
         headers=headers), 'Katsu Donors')
@@ -218,11 +218,11 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
 
     # Will need to look into how to go about this -- ideally we implement this into the SQL in Katsu's side
     filters = [
-        (treatment, f"{config.KATSU_URL}/v2/authorized/treatments/", 'treatment_type', None),
-        (chemotherapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'chemotherapy'),
-        (immunotherapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'immunotherapy'),
-        (hormone_therapy, f"{config.KATSU_URL}/v2/authorized/systemic_therapies/", 'drug_name', 'hormone therapy'),
-        (primary_site, f"{config.KATSU_URL}/v2/authorized/primary_diagnoses/", 'primary_site', None),
+        (treatment, f"{config.KATSU_URL}/v3/authorized/treatments/", 'treatment_type', None),
+        (chemotherapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'chemotherapy'),
+        (immunotherapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'immunotherapy'),
+        (hormone_therapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'hormone therapy'),
+        (primary_site, f"{config.KATSU_URL}/v3/authorized/primary_diagnoses/", 'primary_site', None),
     ]
     for (this_filter, url, param_name, therapy_type) in filters:
         if this_filter != "":
@@ -243,7 +243,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             htsget = query_htsget(headers, gene, assembly, chrom)
 
             # We need to be able to map specimens, so we'll grab it from Katsu
-            specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=headers)
+            specimen_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
             specimen_query = safe_get_request_json(specimen_query_req, 'Katsu sample registrations')
             specimen_mapping = {}
             for specimen in specimen_query['items']:
@@ -343,7 +343,7 @@ def genomic_completeness():
 @app.route('/discovery/programs')
 def discovery_programs():
     # Grab all programs from Katsu
-    url = f"{config.KATSU_URL}/v2/discovery/programs/"
+    url = f"{config.KATSU_URL}/v3/discovery/programs/"
     r = safe_get_request_json(requests.get(url), 'Katsu sample registrations')
 
     # Aggregate all of the programs' return values into one value for the entire site
@@ -416,7 +416,7 @@ def discovery_programs():
 
 @app.route('/discovery/query')
 def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
-    url = f"{config.KATSU_URL}/v2/explorer/donors/"
+    url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = {}
     for k in request.headers.keys():
         headers[k] = request.headers[k]
