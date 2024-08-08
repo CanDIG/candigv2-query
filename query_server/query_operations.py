@@ -36,8 +36,9 @@ def safe_get_request_json(request, name):
     return request.json()
 
 # Grab a list of donors matching a given filter from the given URL
-def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type=None):
+def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type=None, keep_all=False):
     permissible_donors = set()
+    all_results = []
     for parameter in parameter_list:
         # TODO: Fix the page_size call here -- use a consume_all() query like in the frontend
         parameters = {
@@ -49,7 +50,21 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type
         treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
         results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
-    return permissible_donors
+        if keep_all:
+            all_results.extend(results)
+
+    # If we are required to return all results, query at least once
+    if not parameter_list and keep_all:
+        parameters = {
+            'page_size': PAGE_SIZE
+        }
+        if therapy_type != None:
+            parameters['systemic_therapy_type'] = therapy_type
+        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
+        results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
+        permissible_donors |= set([result['submitter_donor_id'] for result in results])
+        all_results.extend(results)
+    return permissible_donors, all_results
 
 def add_or_increment(dict, key):
     if key in dict:
@@ -57,7 +72,7 @@ def add_or_increment(dict, key):
     else:
         dict[key] = 1
 
-def get_summary_stats(donors, headers):
+def get_summary_stats(donors, primary_diagnoses, headers):
     # Perform (and cache) summary statistics
     age_at_diagnosis = {}
     donors_by_id = {}
@@ -78,7 +93,7 @@ def get_summary_stats(donors, headers):
                 add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
         # primary sites
-        for primary_diagnosis in donor['primary_diagnosis']:
+        for primary_diagnosis in primary_diagnoses:
             primary_site = primary_diagnosis['primary_site']
             if primary_site in primary_site_count:
                 primary_site_count[primary_site] += 1
@@ -222,11 +237,10 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
         (chemotherapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'chemotherapy'),
         (immunotherapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'immunotherapy'),
         (hormone_therapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'hormone therapy'),
-        (primary_site, f"{config.KATSU_URL}/v3/authorized/primary_diagnoses/", 'primary_site', None),
     ]
     for (this_filter, url, param_name, therapy_type) in filters:
         if this_filter != "":
-            permissible_donors = get_donors_from_katsu(
+            permissible_donors, _ = get_donors_from_katsu(
                 url,
                 param_name,
                 this_filter,
@@ -234,6 +248,14 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                 therapy_type
             )
             donors = [donor for donor in donors if donor['submitter_donor_id'] in permissible_donors]
+    permissible_donors, primary_diagnoses = get_donors_from_katsu(
+        f"{config.KATSU_URL}/v3/authorized/primary_diagnoses/",
+        'primary_site',
+        primary_site if primary_site != "" else [],
+        headers,
+        keep_all=True
+    )
+    donors = [donor for donor in donors if donor['submitter_donor_id'] in permissible_donors]
 
     # Now we combine this with HTSGet, if any
     genomic_query = []
@@ -298,7 +320,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             print(f"Error while reading HTSGet response: {ex}")
 
     # TODO: Cache the above list of donor IDs and summary statistics
-    summary_stats = get_summary_stats(donors, headers)
+    summary_stats = get_summary_stats(donors, primary_diagnoses, headers)
 
     # Determine which part of the filtered donors to send back
     full_data = {
