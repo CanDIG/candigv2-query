@@ -21,6 +21,8 @@ if os.getenv("DEBUG_MODE", "1") == "1":
 
 try:
     SERVICE_TOKEN = create_service_token()
+    if DEBUG_MODE:
+        print(f"SERVICE_TOKEN: {SERVICE_TOKEN}")
 except:
     print("Could not obtain a service token")
     SERVICE_TOKEN = ""
