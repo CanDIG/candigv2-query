@@ -210,7 +210,7 @@ def fix_dicts(to_fix):
         return to_fix
 
 @app.route('/query')
-def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
+def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
     # Add a service token to the headers so that other services will know this is from the query service:
     headers = {}
     for k in request.headers.keys():
@@ -233,11 +233,14 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
 
     # Will need to look into how to go about this -- ideally we implement this into the SQL in Katsu's side
     filters = [
-        (treatment, f"{config.KATSU_URL}/v3/authorized/treatments/", 'treatment_type', None),
-        (chemotherapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'chemotherapy'),
-        (immunotherapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'immunotherapy'),
-        (hormone_therapy, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', 'hormone therapy'),
+        (treatment, f"{config.KATSU_URL}/v3/authorized/treatments/", 'treatment_type', None)
     ]
+    if type(systemic_therapy_type) is list:
+        for this_type in systemic_therapy_type:
+            filters.add((drug_name, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', this_type))
+    else:
+        filters.add((drug_name, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', None))
+
     for (this_filter, url, param_name, therapy_type) in filters:
         if this_filter != "":
             permissible_donors, _ = get_donors_from_katsu(
@@ -437,7 +440,7 @@ def discovery_programs():
     return fix_dicts(ret_val), 200
 
 @app.route('/discovery/query')
-def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+def discovery_query(treatment="", primary_site="", systemic_therapy="", systemic_therapy_type="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = {}
     for k in request.headers.keys():
@@ -447,9 +450,8 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
     param_mapping = [
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
-        (chemotherapy, "chemotherapy_drug_name"),
-        (immunotherapy, "immunotherapy_drug_name"),
-        (hormone_therapy, "hormone_therapy_drug_name"),
+        (systemic_therapy, "systemic_therapy_drug_name"),
+        (systemic_therapy_type, "systemic_therapy_type")
         (exclude_cohorts, "exclude_cohorts")
     ]
     params = {}
