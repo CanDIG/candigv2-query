@@ -451,7 +451,7 @@ def discovery_query(treatment="", primary_site="", systemic_therapy="", systemic
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
         (systemic_therapy, "systemic_therapy_drug_name"),
-        (systemic_therapy_type, "systemic_therapy_type")
+        (systemic_therapy_type, "systemic_therapy_type"),
         (exclude_cohorts, "exclude_cohorts")
     ]
     params = {}
