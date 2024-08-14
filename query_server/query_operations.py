@@ -237,9 +237,9 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
     ]
     if type(systemic_therapy_type) is list:
         for this_type in systemic_therapy_type:
-            filters.add((drug_name, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', this_type))
+            filters.append((drug_name, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', this_type))
     else:
-        filters.add((drug_name, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', None))
+        filters.append((drug_name, f"{config.KATSU_URL}/v3/authorized/systemic_therapies/", 'drug_name', None))
 
     for (this_filter, url, param_name, therapy_type) in filters:
         if this_filter != "":
