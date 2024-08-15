@@ -499,8 +499,8 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
 @app.route('/whoami')
 def whoami():
     # Grab information about the currently logged-in user
-    logger.log_message("DEBUG", config.OPA_URL)
-    logger.log_message("DEBUG", config.AUTHZ)
+    logger.debug(config.OPA_URL)
+    logger.debug(config.AUTHZ)
     token = get_auth_token(request)
     headers = {
         "Authorization": f"Bearer {token}"
@@ -514,5 +514,5 @@ def whoami():
                 }
             }
         )
-    logger.log_message("DEBUG", response)
+    logger.debug(response)
     return { 'key': get_user_id(request, opa_url = config.OPA_URL) }
