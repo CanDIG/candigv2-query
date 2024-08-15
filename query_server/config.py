@@ -1,6 +1,10 @@
 import configparser
 import os
 from authx.auth import create_service_token
+from candigv2_logging.logging import CanDIGLogger
+
+
+logger = CanDIGLogger(__file__)
 
 config = configparser.ConfigParser(interpolation=None)
 config.read(os.path.abspath(f"{os.path.dirname(os.path.realpath(__file__))}/../config.ini"))
@@ -22,5 +26,5 @@ if os.getenv("DEBUG_MODE", "1") == "1":
 try:
     SERVICE_TOKEN = create_service_token()
 except:
-    print("Could not obtain a service token")
+    logger.log_message("ERROR", "Could not obtain a service token")
     SERVICE_TOKEN = ""
