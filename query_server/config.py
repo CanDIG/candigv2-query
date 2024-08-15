@@ -26,5 +26,5 @@ if os.getenv("DEBUG_MODE", "1") == "1":
 try:
     SERVICE_TOKEN = create_service_token()
 except:
-    logger.log_message("ERROR", "Could not obtain a service token")
+    logger.error("Could not obtain a service token")
     SERVICE_TOKEN = ""

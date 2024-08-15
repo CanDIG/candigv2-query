@@ -106,7 +106,7 @@ def get_summary_stats(donors, headers):
                 for treatment_type in treatment["treatment_type"]:
                     add_or_increment(treatment_type_count, treatment_type)
             except TypeError as e:
-                logger.log_message("ERROR", f"Could not grab summary treatment stats: {e}")
+                logger.error(f"Could not grab summary treatment stats: {e}")
                 pass
 
     return {
@@ -263,7 +263,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             for response in htsget['response']:
                 for case_data in response['caseLevelData']:
                     if 'biosampleId' not in case_data:
-                        logger.log_message("ERROR", f"Could not parse htsget response for {case_data}")
+                        logger.error(f"Could not parse htsget response for {case_data}")
                         continue
                     id = case_data['biosampleId'].split('~')
                     if len(id) > 1:
@@ -274,12 +274,12 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                             case_data['donor_id'] = specimen_mapping[submitter_specimen_id][0]
                             case_data['tumour_normal_designation'] = specimen_mapping[submitter_specimen_id][1]
                         else:
-                            logger.log_message("ERROR", f"Could not find donor mapping for {case_data}")
+                            logger.error(f"Could not find donor mapping for {case_data}")
                             case_data['donor_id'] = submitter_specimen_id
                             case_data['tumour_normal_designation'] = 'Tumour'
                         htsget_found_donors[case_data['donor_id']] = 1
                     else:
-                        logger.log_message("ERROR", f"Could not parse biosampleId for {case_data}")
+                        logger.error(f"Could not parse biosampleId for {case_data}")
                         case_data['program_id'] = None
                         case_data['donor_id'] = None
                         case_data['submitter_specimen_id'] = case_data['biosampleId']
@@ -297,7 +297,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                         genomic_query.append(case_data)
 
         except Exception as ex:
-            logger.log_message("ERROR", f"Error while reading HTSGet response: {ex}")
+            logger.error(f"Error while reading HTSGet response: {ex}")
 
     # TODO: Cache the above list of donor IDs and summary statistics
     summary_stats = get_summary_stats(donors, headers)
@@ -363,7 +363,7 @@ def discovery_programs():
     unused_initialized = False
     for program in r:
         if 'metadata' not in program:
-            logger.log_message("ERROR", f"Strange result from Katsu: no metadata in {program}")
+            logger.error(f"Strange result from Katsu: no metadata in {program}")
             continue
         metadata = program['metadata']
 
@@ -381,7 +381,7 @@ def discovery_programs():
                 site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
                 site_summary_stats['summary_cases']['total_cases'] += metadata['summary_cases']['total_cases']
             except:
-                logger.log_message("ERROR", f"Strange result from Katsu: unreadable summary_cases in {program} metadata")
+                logger.error(f"Strange result from Katsu: unreadable summary_cases in {program} metadata")
 
         if 'required_but_missing' not in metadata:
             # Unreadable result; we cannot continue
@@ -400,7 +400,7 @@ def discovery_programs():
                 else:
                     site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
         except Exception as ex:
-            logger.log_message("ERROR", f"Unable to parse required fields result from Katsu: {ex}")
+            logger.error(f"Unable to parse required fields result from Katsu: {ex}")
 
     for schema in site_summary_stats['schemas_used']:
         unused_schemas.discard(schema)
@@ -462,12 +462,12 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
                         found_donor = specimen_mapping[merged_id]
                         htsget_found_donors[f"{found_donor['program_id']}~{found_donor['submitter_donor_id']}"] = 1
                     else:
-                        logger.log_message("ERROR", f"Could not find specimen identified in HTSGet: {merged_id}")
+                        logger.error(f"Could not find specimen identified in HTSGet: {merged_id}")
             # Filter clinical results based on genomic results
             donors = [donor for donor in donors if f"{donor['program_id']}~{donor['submitter_donor_id']}" in htsget_found_donors]
 
         except Exception as ex:
-            logger.log_message("ERROR", f"Error while querying HTSGet: {ex}")
+            logger.error(f"Error while querying HTSGet: {ex}")
 
     # Assemble summary statistics
     # NB: Do we need this split up into site-vs-program as well?
