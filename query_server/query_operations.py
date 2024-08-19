@@ -92,18 +92,19 @@ def get_summary_stats(donors, primary_diagnoses, headers):
             else:
                 add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
-        # primary sites
-        for primary_diagnosis in primary_diagnoses:
-            primary_site = primary_diagnosis['primary_site']
-            if primary_site in primary_site_count:
-                primary_site_count[primary_site] += 1
-            else:
-                primary_site_count[primary_site] = 1
         program_id = donor['program_id']
         if program_id in patients_per_cohort:
             patients_per_cohort[program_id] += 1
         elif program_id is not None:
             patients_per_cohort[program_id] = 1
+
+    # primary sites
+    for primary_diagnosis in primary_diagnoses:
+        primary_site = primary_diagnosis['primary_site']
+        if primary_site in primary_site_count:
+            primary_site_count[primary_site] += 1
+        else:
+            primary_site_count[primary_site] = 1
 
     # Treatment types
     # http://candig.docker.internal:8008/v3/authorized/treatments/
@@ -321,6 +322,10 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
 
         except Exception as ex:
             print(f"Error while reading HTSGet response: {ex}")
+
+    # We also need to cut down the list of primary diagnoses based on the filtered list of donors at this point
+    permissible_donors = set([donor['submitter_donor_id'] for donor in donors])
+    primary_diagnoses = [primary_diagnosis for primary_diagnosis in primary_diagnoses if primary_diagnosis['submitter_donor_id'] in permissible_donors]
 
     # TODO: Cache the above list of donor IDs and summary statistics
     summary_stats = get_summary_stats(donors, primary_diagnoses, headers)
