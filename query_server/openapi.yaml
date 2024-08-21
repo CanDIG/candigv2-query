@@ -30,9 +30,7 @@ paths:
             parameters:
                 - $ref: "#/components/parameters/treatmentParam"
                 - $ref: "#/components/parameters/primarySiteParam"
-                - $ref: "#/components/parameters/chemotherapyParam"
-                - $ref: "#/components/parameters/immunotherapyParam"
-                - $ref: "#/components/parameters/hormoneTherapyParam"
+                - $ref: "#/components/parameters/drugNameParam"
                 - $ref: "#/components/parameters/chrParam"
                 - $ref: "#/components/parameters/geneParam"
                 - $ref: "#/components/parameters/assemblyParam"
@@ -89,9 +87,7 @@ paths:
             parameters:
                 - $ref: "#/components/parameters/treatmentParam"
                 - $ref: "#/components/parameters/primarySiteParam"
-                - $ref: "#/components/parameters/chemotherapyParam"
-                - $ref: "#/components/parameters/immunotherapyParam"
-                - $ref: "#/components/parameters/hormoneTherapyParam"
+                - $ref: "#/components/parameters/drugNameParam"
                 - $ref: "#/components/parameters/chrParam"
                 - $ref: "#/components/parameters/geneParam"
                 - $ref: "#/components/parameters/assemblyParam"
@@ -140,30 +136,21 @@ components:
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
-        chemotherapyParam:
+        drugNameParam:
             in: query
-            name: chemotherapy
+            name: drug_name
             style: pipeDelimited
-            description: A pipe-separated list of chemotherapy treatments to look for
+            description: A pipe-separated list of drug names to look for
             example: FLUOROURACIL|LEUCOVORIN
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
-        immunotherapyParam:
+        systemicTherapyTypeParam:
             in: query
-            name: immunotherapy
+            name: systemic_therapy_type
             style: pipeDelimited
-            description: A pipe-separated list of immunotherapy treatments to look for
-            example: Necitumumab|Pembrolizumab
-            required: false
-            schema:
-                $ref: '#/components/schemas/Fields'
-        hormoneTherapyParam:
-            in: query
-            name: hormone_therapy
-            style: pipeDelimited
-            description: A pipe-separated list of hormone therapy treatments to look for
-            example: Goserelin|Leuprolide
+            description: A pipe-separated list of systemic therapies that we accept
+            example: Chemotherapy|Immunotherapy
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
