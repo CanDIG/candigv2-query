@@ -5,4 +5,4 @@ connexion==2.14.2
 uwsgi==2.0.23
 swagger-ui-bundle==0.0.9
 candigv2-authx@git+https://github.com/CanDIG/candigv2-authx.git@v2.4.2
-candigv2-logging@git+https://github.com/CanDIG/candigv2-logging.git@develop
+candigv2-logging@git+https://github.com/CanDIG/candigv2-logging.git@v1.0.0
