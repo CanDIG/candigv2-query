@@ -8,4 +8,5 @@ if [[ -f "initial_setup" ]]; then
     rm initial_setup
 fi
 
-uwsgi uwsgi.ini
+cd query_server
+gunicorn server:app
