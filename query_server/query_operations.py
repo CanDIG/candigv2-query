@@ -236,6 +236,31 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
     # Filter on excluded cohorts
     donors = [donor for donor in donors if donor['program_id'] not in exclude_cohorts]
 
+    url = f"{config.KATSU_URL}/v3/explorer/donors/"
+    headers = {}
+    for k in request.headers.keys():
+        headers[k] = request.headers[k]
+    headers["X-Service-Token"] = config.SERVICE_TOKEN
+
+    param_mapping = [
+        (treatment, "treatment_type"),
+        (primary_site, "primary_site"),
+        (drug_name, "systemic_therapy_drug_name"),
+        (systemic_therapy_type, "systemic_therapy_type"),
+        (exclude_cohorts, "exclude_cohorts")
+    ]
+    params = {}
+    for param in param_mapping:
+        if param[0] == "" or param[0] == []:
+            continue
+        params[param[1]] = param[0]
+
+    full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
+    donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
+
+    # Filter on excluded cohorts
+    donors = [donor for donor in donors if donor['program_id'] not in exclude_cohorts]
+
     # Will need to look into how to go about this -- ideally we implement this into the SQL in Katsu's side
     filters = [
         (treatment, f"{config.KATSU_URL}/v3/authorized/treatments/", 'treatment_type', None)
