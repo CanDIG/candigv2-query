@@ -98,18 +98,15 @@ def get_summary_stats(donors, primary_sites, treatments):
                 add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
         program_id = donor['program_id']
-        if program_id in patients_per_cohort:
-            patients_per_cohort[program_id] += 1
-        elif program_id is not None:
-            patients_per_cohort[program_id] = 1
+        add_or_increment(patients_per_cohort, program_id)
 
         # primary sites
-        if donor['submitter_donor_id'] in primary_sites and primary_sites[donor['submitter_donor_id']] is not None:
-            for primary_site in primary_sites[donor['submitter_donor_id']]:
-                if primary_site in primary_site_count:
-                    primary_site_count[primary_site] += 1
-                else:
-                    primary_site_count[primary_site] = 1
+        if donor['submitter_donor_id'] in primary_sites:
+            if primary_sites[donor['submitter_donor_id']] is not None:
+                for primary_site in primary_sites[donor['submitter_donor_id']]:
+                    add_or_increment(primary_site_count, str(primary_site))
+            else:
+                add_or_increment(primary_site_count, 'None')
 
         if donor['submitter_donor_id'] in treatments and treatments[donor['submitter_donor_id']] is not None:
             for treatment_type in treatments[donor['submitter_donor_id']]:
