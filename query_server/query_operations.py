@@ -1,11 +1,16 @@
 from flask import request, Flask
+import config
 import copy
 import re
 import requests
 import secrets
 import urllib
+from authx.auth import get_user_id, get_auth_token
+from candigv2_logging.logging import CanDIGLogger
 
-import config
+
+logger = CanDIGLogger(__file__)
+
 
 PAGE_SIZE = 10000000
 
@@ -35,18 +40,35 @@ def safe_get_request_json(request, name):
     return request.json()
 
 # Grab a list of donors matching a given filter from the given URL
-def get_donors_from_katsu(url, param_name, parameter_list, headers):
+def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type=None, keep_all=False):
     permissible_donors = set()
+    all_results = []
     for parameter in parameter_list:
         # TODO: Fix the page_size call here -- use a consume_all() query like in the frontend
         parameters = {
             param_name: parameter,
             'page_size': PAGE_SIZE
         }
+        if therapy_type != None:
+            parameters['systemic_therapy_type'] = therapy_type
         treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
         results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
-    return permissible_donors
+        if keep_all:
+            all_results.extend(results)
+
+    # If we are required to return all results, query at least once
+    if not parameter_list and keep_all:
+        parameters = {
+            'page_size': PAGE_SIZE
+        }
+        if therapy_type != None:
+            parameters['systemic_therapy_type'] = therapy_type
+        treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
+        results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
+        permissible_donors |= set([result['submitter_donor_id'] for result in results])
+        all_results.extend(results)
+    return permissible_donors, all_results
 
 def add_or_increment(dict, key):
     if key in dict:
@@ -54,12 +76,13 @@ def add_or_increment(dict, key):
     else:
         dict[key] = 1
 
-def get_summary_stats(donors, headers):
+def get_summary_stats(donors, primary_sites, treatments):
     # Perform (and cache) summary statistics
     age_at_diagnosis = {}
     donors_by_id = {}
-    cancer_type_count = {}
+    primary_site_count = {}
     patients_per_cohort = {}
+    treatment_type_count = {}
     for donor in donors:
         # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
         # So we just use that info
@@ -74,40 +97,25 @@ def get_summary_stats(donors, headers):
             else:
                 add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
-        # Cancer types
-        if donor['primary_site']:
-            for cancer_type in donor['primary_site']:
-                if cancer_type in cancer_type_count:
-                    cancer_type_count[cancer_type] += 1
-                else:
-                    cancer_type_count[cancer_type] = 1
         program_id = donor['program_id']
-        if program_id in patients_per_cohort:
-            patients_per_cohort[program_id] += 1
-        elif program_id is not None:
-            patients_per_cohort[program_id] = 1
+        add_or_increment(patients_per_cohort, program_id)
 
-    # Treatment types
-    # http://candig.docker.internal:8008/v2/authorized/treatments/
-    treatments = requests.get(f"{config.KATSU_URL}/v2/authorized/treatments/?page_size={PAGE_SIZE}",
-        headers=headers)
-    treatments = safe_get_request_json(treatments, 'Katsu treatments')['items']
-    treatment_type_count = {}
-    for treatment in treatments:
-        if (treatment["submitter_donor_id"] in donors_by_id and
-            "treatment_type" in treatment and
-            treatment["treatment_type"] is not None):
-            try:
-                for treatment_type in treatment["treatment_type"]:
-                    add_or_increment(treatment_type_count, treatment_type)
-            except TypeError as e:
-                print(f"Could not grab summary treatment stats: {e}")
-                pass
+        # primary sites
+        if donor['submitter_donor_id'] in primary_sites:
+            if primary_sites[donor['submitter_donor_id']] is not None:
+                for primary_site in primary_sites[donor['submitter_donor_id']]:
+                    add_or_increment(primary_site_count, str(primary_site))
+            else:
+                add_or_increment(primary_site_count, 'None')
+
+        if donor['submitter_donor_id'] in treatments and treatments[donor['submitter_donor_id']] is not None:
+            for treatment_type in treatments[donor['submitter_donor_id']]:
+                add_or_increment(treatment_type_count, treatment_type)
 
     return {
         'age_at_diagnosis': age_at_diagnosis,
         'treatment_type_count': treatment_type_count,
-        'cancer_type_count': cancer_type_count,
+        'primary_site_count': primary_site_count,
         'patients_per_cohort': patients_per_cohort
     }
 
@@ -154,8 +162,24 @@ def query_htsget(headers, gene, assembly, chrom):
     if gene != "":
         return query_htsget_gene(headers, gene)
     else:
-        search = re.search('(chr)*([XY0-9]{2}):(\d+)-(\d+)', chrom)
+        search = re.search(r'(chr)*([XY0-9]{1,2}):(\d+)-(\d+)', chrom)
         return query_htsget_pos(headers, assembly, search.group(2), int(search.group(3)), int(search.group(4)))
+
+# Recursively deep search an object or list for any values less than the aggregate threshold
+# NB: does not handle tuples
+def censor_response(object):
+    if type(object) is list:
+        return [censor_response(value) for value in object]
+    elif isinstance(object, dict):
+        new_dict = {}
+        for key, val in object.items():
+            new_dict[key] = censor_response(val)
+        return new_dict
+    elif isinstance(object, int):
+        return f"<{config.AGGREGATE_COUNT_THRESHOLD}" if object < config.AGGREGATE_COUNT_THRESHOLD else object
+
+    # Unknown -- leave as-is
+    return object
 
 # The return value does not like None being used as a key, so this helper function recursively
 # goes through the dictionary provided, and changes all keys to strings
@@ -176,7 +200,7 @@ def fix_dicts(to_fix):
         return to_fix
 
 @app.route('/query')
-def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
+def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
     # Add a service token to the headers so that other services will know this is from the query service:
     headers = {}
     for k in request.headers.keys():
@@ -187,34 +211,44 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
     # We're grabbing (and storing in memory) all the donor data in Katsu with the below request
 
     # Query the appropriate Katsu endpoint
-    params = { 'page_size': PAGE_SIZE }
-    url = f"{config.KATSU_URL}/v2/authorized/donors/"
-    if primary_site != "":
-        params['primary_site'] = primary_site
-    r = safe_get_request_json(requests.get(f"{url}?{urllib.parse.urlencode(params, True)}",
-        # Reuse their bearer token
-        headers=headers), 'Katsu Donors')
-    donors = r['items']
+    url = f"{config.KATSU_URL}/v3/authorized/query/"
+    headers = {}
+    for k in request.headers.keys():
+        headers[k] = request.headers[k]
+    headers["X-Service-Token"] = config.SERVICE_TOKEN
+
+    param_mapping = [
+        (treatment, "treatment_type"),
+        (primary_site, "primary_site"),
+        (drug_name, "systemic_therapy_drug_name"),
+        (systemic_therapy_type, "systemic_therapy_type"),
+        (exclude_cohorts, "exclude_cohorts")
+    ]
+    params = {}
+    for param in param_mapping:
+        if param[0] == "" or param[0] == []:
+            continue
+        params[param[1]] = param[0]
+
+    full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
+    donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')['items']
 
     # Filter on excluded cohorts
     donors = [donor for donor in donors if donor['program_id'] not in exclude_cohorts]
 
-    # Will need to look into how to go about this -- ideally we implement this into the SQL in Katsu's side
-    filters = [
-        (treatment, f"{config.KATSU_URL}/v2/authorized/treatments/", 'treatment_type'),
-        (chemotherapy, f"{config.KATSU_URL}/v2/authorized/chemotherapies/", 'drug_name'),
-        (immunotherapy, f"{config.KATSU_URL}/v2/authorized/immunotherapies/", 'drug_name'),
-        (hormone_therapy, f"{config.KATSU_URL}/v2/authorized/hormone_therapies/", 'drug_name')
-    ]
-    for (this_filter, url, param_name) in filters:
-        if this_filter != "":
-            permissible_donors = get_donors_from_katsu(
-                url,
-                param_name,
-                this_filter,
-                headers
-            )
-            donors = [donor for donor in donors if donor['submitter_donor_id'] in permissible_donors]
+    # Note: We get three extra things from /authorized/query that aren't part of the Donors object:
+    # 1) submitter_sample_ids
+    # 2) primary_site
+    # 3) treatment_type
+    # These are used to build the summary information without needing to re-query Katsu
+    # For the purposes of the return value, let's remove all three of these into their own variables
+    summary_info = {}
+    summary_headers = ['submitter_sample_ids', 'primary_site', 'treatment_type']
+    for header in summary_headers:
+        summary_info[header] = {}
+        for donor in donors:
+            summary_info[header][donor['submitter_donor_id']] = donor[header]
+            del donor[header]
 
     # Now we combine this with HTSGet, if any
     genomic_query = []
@@ -224,7 +258,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             htsget = query_htsget(headers, gene, assembly, chrom)
 
             # We need to be able to map specimens, so we'll grab it from Katsu
-            specimen_query_req = requests.get(f"{config.KATSU_URL}/v2/authorized/sample_registrations/?page_size=10000000", headers=headers)
+            specimen_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
             specimen_query = safe_get_request_json(specimen_query_req, 'Katsu sample registrations')
             specimen_mapping = {}
             for specimen in specimen_query['items']:
@@ -242,7 +276,7 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
             for response in htsget['response']:
                 for case_data in response['caseLevelData']:
                     if 'biosampleId' not in case_data:
-                        print(f"Could not parse htsget response for {case_data}")
+                        logger.error(f"Could not parse htsget response for {case_data}")
                         continue
                     id = case_data['biosampleId'].split('~')
                     if len(id) > 1:
@@ -253,12 +287,12 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                             case_data['donor_id'] = specimen_mapping[submitter_specimen_id][0]
                             case_data['tumour_normal_designation'] = specimen_mapping[submitter_specimen_id][1]
                         else:
-                            print(f"Could not find donor mapping for {case_data}")
+                            logger.error(f"Could not find donor mapping for {case_data}")
                             case_data['donor_id'] = submitter_specimen_id
                             case_data['tumour_normal_designation'] = 'Tumour'
                         htsget_found_donors[case_data['donor_id']] = 1
                     else:
-                        print(f"Could not parse biosampleId for {case_data}")
+                        logger.error(f"Could not parse biosampleId for {case_data}")
                         case_data['program_id'] = None
                         case_data['donor_id'] = None
                         case_data['submitter_specimen_id'] = case_data['biosampleId']
@@ -276,10 +310,10 @@ def query(treatment="", primary_site="", chemotherapy="", immunotherapy="", horm
                         genomic_query.append(case_data)
 
         except Exception as ex:
-            print(f"Error while reading HTSGet response: {ex}")
+            logger.error(f"Error while reading HTSGet response: {ex}")
 
     # TODO: Cache the above list of donor IDs and summary statistics
-    summary_stats = get_summary_stats(donors, headers)
+    summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
 
     # Determine which part of the filtered donors to send back
     full_data = {
@@ -324,7 +358,7 @@ def genomic_completeness():
 @app.route('/discovery/programs')
 def discovery_programs():
     # Grab all programs from Katsu
-    url = f"{config.KATSU_URL}/v2/discovery/programs/"
+    url = f"{config.KATSU_URL}/v3/discovery/programs/"
     r = safe_get_request_json(requests.get(url), 'Katsu sample registrations')
 
     # Aggregate all of the programs' return values into one value for the entire site
@@ -342,7 +376,7 @@ def discovery_programs():
     unused_initialized = False
     for program in r:
         if 'metadata' not in program:
-            print(f"Strange result from Katsu: no metadata in {program}")
+            logger.error(f"Strange result from Katsu: no metadata in {program}")
             continue
         metadata = program['metadata']
 
@@ -360,7 +394,7 @@ def discovery_programs():
                 site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
                 site_summary_stats['summary_cases']['total_cases'] += metadata['summary_cases']['total_cases']
             except:
-                print(f"Strange result from Katsu: unreadable summary_cases in {program} metadata")
+                logger.error(f"Strange result from Katsu: unreadable summary_cases in {program} metadata")
 
         if 'required_but_missing' not in metadata:
             # Unreadable result; we cannot continue
@@ -379,7 +413,7 @@ def discovery_programs():
                 else:
                     site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
         except Exception as ex:
-            print(f"Unable to parse required fields result from Katsu: {ex}")
+            logger.error(f"Unable to parse required fields result from Katsu: {ex}")
 
     for schema in site_summary_stats['schemas_used']:
         unused_schemas.discard(schema)
@@ -396,8 +430,8 @@ def discovery_programs():
     return fix_dicts(ret_val), 200
 
 @app.route('/discovery/query')
-def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherapy="", hormone_therapy="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
-    url = f"{config.KATSU_URL}/v2/explorer/donors/"
+def discovery_query(treatment="", primary_site="", systemic_therapy="", systemic_therapy_type="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+    url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = {}
     for k in request.headers.keys():
         headers[k] = request.headers[k]
@@ -406,9 +440,8 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
     param_mapping = [
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
-        (chemotherapy, "chemotherapy_drug_name"),
-        (immunotherapy, "immunotherapy_drug_name"),
-        (hormone_therapy, "hormone_therapy_drug_name"),
+        (systemic_therapy, "systemic_therapy_drug_name"),
+        (systemic_therapy_type, "systemic_therapy_type"),
         (exclude_cohorts, "exclude_cohorts")
     ]
     params = {}
@@ -441,26 +474,26 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
                         found_donor = specimen_mapping[merged_id]
                         htsget_found_donors[f"{found_donor['program_id']}~{found_donor['submitter_donor_id']}"] = 1
                     else:
-                        print(f"Could not find specimen identified in HTSGet: {merged_id}")
+                        logger.error(f"Could not find specimen identified in HTSGet: {merged_id}")
             # Filter clinical results based on genomic results
             donors = [donor for donor in donors if f"{donor['program_id']}~{donor['submitter_donor_id']}" in htsget_found_donors]
 
         except Exception as ex:
-            print(f"Error while querying HTSGet: {ex}")
+            logger.error(f"Error while querying HTSGet: {ex}")
 
     # Assemble summary statistics
     # NB: Do we need this split up into site-vs-program as well?
     summary_stats = {
         'age_at_diagnosis': {},
         'treatment_type_count': {},
-        'cancer_type_count': {},
+        'primary_site_count': {},
         'patients_per_cohort': {}
     }
     summary_stat_mapping = [
         ('age_at_diagnosis', 'age_at_diagnosis'),
         ('treatment_type_count', 'treatment_type'),
         ('patients_per_cohort', 'program_id'),
-        ('cancer_type_count', 'primary_site')
+        ('primary_site_count', 'primary_site')
     ]
     for donor in donors:
         for mapping in summary_stat_mapping:
@@ -469,4 +502,29 @@ def discovery_query(treatment="", primary_site="", chemotherapy="", immunotherap
                     add_or_increment(summary_stats[mapping[0]], item)
             else:
                 add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
+
+    # Censor if necessary
+    summary_stats = censor_response(summary_stats)
+
     return fix_dicts(summary_stats), 200
+
+@app.route('/whoami')
+def whoami():
+    # Grab information about the currently logged-in user
+    logger.debug(config.OPA_URL)
+    logger.debug(config.AUTHZ)
+    token = get_auth_token(request)
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+    response = requests.post(
+        config.OPA_URL + f"/v1/data/idp/user_key",
+        headers=headers,
+        json={
+            "input": {
+                    "token": token
+                }
+            }
+        )
+    logger.debug(response)
+    return { 'key': get_user_id(request, opa_url = config.OPA_URL) }
