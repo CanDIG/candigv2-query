@@ -2,6 +2,8 @@
 
 Query API for Katsu and HTSGet that allows for caching and pagination of calls.
 
+[openapi spec on Swagger](https://editor.swagger.io/?url=https://raw.githubusercontent.com/CanDIG/query/main/query_server/openapi.yaml)
+
 ## Stack
 
 - [Flask](http://flask.pocoo.org/)
