@@ -224,7 +224,9 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
         (systemic_therapy_type, "systemic_therapy_type"),
         (exclude_cohorts, "exclude_cohorts")
     ]
-    params = {}
+    params = {
+        'page_size': PAGE_SIZE
+    }
     for param in param_mapping:
         if param[0] == "" or param[0] == []:
             continue
@@ -430,7 +432,7 @@ def discovery_programs():
     return fix_dicts(ret_val), 200
 
 @app.route('/discovery/query')
-def discovery_query(treatment="", primary_site="", systemic_therapy="", systemic_therapy_type="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = {}
     for k in request.headers.keys():
@@ -440,11 +442,12 @@ def discovery_query(treatment="", primary_site="", systemic_therapy="", systemic
     param_mapping = [
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
-        (systemic_therapy, "systemic_therapy_drug_name"),
-        (systemic_therapy_type, "systemic_therapy_type"),
+        (drug_name, "systemic_therapy_drug_name"),
         (exclude_cohorts, "exclude_cohorts")
     ]
-    params = {}
+    params = {
+        "page_size": PAGE_SIZE
+    }
     for param in param_mapping:
         if param[0] == "" or param[0] == []:
             continue
