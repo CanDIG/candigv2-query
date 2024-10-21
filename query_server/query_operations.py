@@ -199,6 +199,22 @@ def fix_dicts(to_fix):
     else:
         return to_fix
 
+# Helper function to format the response from a query into a format the data portal understands
+def format_query_response(donors, genomic_query, summary_stats, page, page_size):
+    # Determine which part of the filtered donors to send back
+    full_data = {
+        'results': donors[(page*page_size):((page+1)*page_size)],
+        'genomic': genomic_query,
+        'count': len(donors),
+        'summary': summary_stats
+    }
+    # full_data['genomic_query_info'] = genomic_query_info
+
+    # Add prev and next parameters to the repsonse, appending a session ID.
+    # Essentially we want to go session ID -> list of donors
+    # and then paginate the list of donors, calling donors_with_clinical_data on each before returning
+    return fix_dicts(full_data), 200
+
 @app.route('/query')
 def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
     # Add a service token to the headers so that other services will know this is from the query service:
@@ -224,14 +240,26 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
         (systemic_therapy_type, "systemic_therapy_type"),
         (exclude_cohorts, "exclude_cohorts")
     ]
-    params = {}
+    params = {
+        'page_size': PAGE_SIZE
+    }
     for param in param_mapping:
         if param[0] == "" or param[0] == []:
             continue
         params[param[1]] = param[0]
 
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
-    donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')['items']
+    donors_req = requests.get(full_url, headers=headers)
+    if not donors_req.ok:
+        if donors_req.status_code == 401:
+            # 401 Unauthorized: the user is not allowed to view any donors at this site
+            # The rest of the code should just pass quietly
+            return format_query_response([], [], get_summary_stats([], {}, {}), page, page_size)
+        else:
+            err_msg = f"Could not got Katsu donors response: {donors_req.status_code} {donors_req.text}"
+            logger.error(err_msg)
+            raise Exception(err_msg)
+    donors = donors_req.json()['items']
 
     # Filter on excluded cohorts
     donors = [donor for donor in donors if donor['program_id'] not in exclude_cohorts]
@@ -315,19 +343,7 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
     # TODO: Cache the above list of donor IDs and summary statistics
     summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
 
-    # Determine which part of the filtered donors to send back
-    full_data = {
-        'results': [donor for donor in donors[(page*page_size):((page+1)*page_size)]],
-        'genomic': genomic_query,
-        'count': len(donors),
-        'summary': summary_stats
-    }
-    # full_data['genomic_query_info'] = genomic_query_info
-
-    # Add prev and next parameters to the repsonse, appending a session ID.
-    # Essentially we want to go session ID -> list of donors
-    # and then paginate the list of donors, calling donors_with_clinical_data on each before returning
-    return fix_dicts(full_data), 200
+    return format_query_response(donors, genomic_query, summary_stats, page, page_size)
 
 @app.route('/genomic_completeness')
 def genomic_completeness():
@@ -430,7 +446,7 @@ def discovery_programs():
     return fix_dicts(ret_val), 200
 
 @app.route('/discovery/query')
-def discovery_query(treatment="", primary_site="", systemic_therapy="", systemic_therapy_type="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = {}
     for k in request.headers.keys():
@@ -440,11 +456,12 @@ def discovery_query(treatment="", primary_site="", systemic_therapy="", systemic
     param_mapping = [
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
-        (systemic_therapy, "systemic_therapy_drug_name"),
-        (systemic_therapy_type, "systemic_therapy_type"),
+        (drug_name, "systemic_therapy_drug_name"),
         (exclude_cohorts, "exclude_cohorts")
     ]
-    params = {}
+    params = {
+        "page_size": PAGE_SIZE
+    }
     for param in param_mapping:
         if param[0] == "" or param[0] == []:
             continue
