@@ -301,7 +301,8 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             #    sample_ids = genomic_query_info[cohort]
 
             htsget_found_donors = {}
-            for response in htsget['response']:
+            responses = htsget['response'] if 'response' in htsget else []
+            for response in responses:
                 for case_data in response['caseLevelData']:
                     if 'biosampleId' not in case_data:
                         logger.error(f"Could not parse htsget response for {case_data}")
