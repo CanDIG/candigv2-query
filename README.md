@@ -7,10 +7,13 @@ Query API for Katsu and HTSGet that allows for caching and pagination of calls.
 ## Stack
 
 - [Flask](http://flask.pocoo.org/)
+- [Connexion](https://github.com/zalando/connexion) for implementing the API
+- [Gunicorn](https://gunicorn.org/) for the WSGI server
 
 ## Installation
 
 The server software can be installed in a virtual environment:
+
 ```
 python setup.py install
 ```
@@ -18,7 +21,7 @@ python setup.py install
 ## Running
 
 This application can be configured by way of the config.ini file in the root of the project.
-The server can be run with: 
+The server can be run with:
 
 ```
 python query_server/server.py
