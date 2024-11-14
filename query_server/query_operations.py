@@ -354,21 +354,16 @@ def genomic_completeness():
         headers[k] = request.headers[k]
     headers["X-Service-Token"] = config.SERVICE_TOKEN
 
-    samples = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/htsget/v1/samples",
+    cohorts = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/cohorts",
             # Reuse their bearer token
-            headers=headers), 'HTSGet cohort statistics')
-
+            headers=headers), 'HTSGet cohorts')
     retVal = {}
-    for sample in samples:
-        program_id = sample['cohort']
+    for program_id in cohorts:
+        cohort = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/cohorts/{program_id}",
+        # Reuse their bearer token
+        headers=headers), 'HTSGet cohort statistics')
         if program_id not in retVal:
-            retVal[program_id] = { 'genomes': 0, 'transcriptomes': 0, 'all': 0 }
-        if len(sample['genomes']) > 0 and len(sample['transcriptomes']) > 0:
-            retVal[program_id]['all'] += 1
-        if len(sample['genomes']) > 0:
-            retVal[program_id]['genomes'] += 1
-        if len(sample['transcriptomes']) > 0:
-            retVal[program_id]['transcriptomes'] += 1
+            retVal[program_id] = cohort["statistics"]
 
     return retVal, 200
 
