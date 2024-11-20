@@ -81,7 +81,7 @@ def get_summary_stats(donors, primary_sites, treatments):
     age_at_diagnosis = {}
     donors_by_id = {}
     primary_site_count = {}
-    patients_per_cohort = {}
+    patients_per_program = {}
     treatment_type_count = {}
     for donor in donors:
         # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
@@ -98,7 +98,7 @@ def get_summary_stats(donors, primary_sites, treatments):
                 add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
         program_id = donor['program_id']
-        add_or_increment(patients_per_cohort, program_id)
+        add_or_increment(patients_per_program, program_id)
 
         # primary sites
         if donor['submitter_donor_id'] in primary_sites:
@@ -116,7 +116,7 @@ def get_summary_stats(donors, primary_sites, treatments):
         'age_at_diagnosis': age_at_diagnosis,
         'treatment_type_count': treatment_type_count,
         'primary_site_count': primary_site_count,
-        'patients_per_cohort': patients_per_cohort
+        'patients_per_program': patients_per_program
     }
 
 def query_htsget_gene(headers, gene_array):
@@ -216,7 +216,7 @@ def format_query_response(donors, genomic_query, summary_stats, page, page_size)
     return fix_dicts(full_data), 200
 
 @app.route('/query')
-def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
+def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_programs=[], session_id=""):
     # Add a service token to the headers so that other services will know this is from the query service:
     headers = {}
     for k in request.headers.keys():
@@ -238,7 +238,7 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
         (primary_site, "primary_site"),
         (drug_name, "systemic_therapy_drug_name"),
         (systemic_therapy_type, "systemic_therapy_type"),
-        (exclude_cohorts, "exclude_cohorts")
+        (exclude_programs, "exclude_programs")
     ]
     params = {
         'page_size': PAGE_SIZE
@@ -261,8 +261,8 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             raise Exception(err_msg)
     donors = donors_req.json()['items']
 
-    # Filter on excluded cohorts
-    donors = [donor for donor in donors if donor['program_id'] not in exclude_cohorts]
+    # Filter on excluded programs
+    donors = [donor for donor in donors if donor['program_id'] not in exclude_programs]
 
     # Note: We get three extra things from /authorized/query that aren't part of the Donors object:
     # 1) submitter_sample_ids
@@ -442,7 +442,7 @@ def discovery_programs():
     return fix_dicts(ret_val), 200
 
 @app.route('/discovery/query')
-def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_programs=[]):
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = {}
     for k in request.headers.keys():
@@ -453,7 +453,7 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
         (drug_name, "systemic_therapy_drug_name"),
-        (exclude_cohorts, "exclude_cohorts")
+        (exclude_programs, "exclude_programs")
     ]
     params = {
         "page_size": PAGE_SIZE
@@ -500,12 +500,12 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
         'age_at_diagnosis': {},
         'treatment_type_count': {},
         'primary_site_count': {},
-        'patients_per_cohort': {}
+        'patients_per_program': {}
     }
     summary_stat_mapping = [
         ('age_at_diagnosis', 'age_at_diagnosis'),
         ('treatment_type_count', 'treatment_type'),
-        ('patients_per_cohort', 'program_id'),
+        ('patients_per_program', 'program_id'),
         ('primary_site_count', 'primary_site')
     ]
     for donor in donors:

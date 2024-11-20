@@ -36,7 +36,7 @@ paths:
                 - $ref: "#/components/parameters/assemblyParam"
                 - $ref: "#/components/parameters/pageSizeParam"
                 - $ref: "#/components/parameters/pageParam"
-                - $ref: "#/components/parameters/excludeCohortsParam"
+                - $ref: "#/components/parameters/excludeProgramsParam"
             operationId: query_operations.query
             responses:
                 200:
@@ -91,7 +91,7 @@ paths:
                 - $ref: "#/components/parameters/chrParam"
                 - $ref: "#/components/parameters/geneParam"
                 - $ref: "#/components/parameters/assemblyParam"
-                - $ref: "#/components/parameters/excludeCohortsParam"
+                - $ref: "#/components/parameters/excludeProgramsParam"
             responses:
                 200:
                     description: Summary statistics
@@ -115,7 +115,7 @@ paths:
                                 $ref: '#/components/schemas/UserInfo'
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
-                    
+
 components:
     parameters:
         treatmentParam:
@@ -178,11 +178,11 @@ components:
             example: hg38
             schema:
                 $ref: '#/components/schemas/Field'
-        excludeCohortsParam:
+        excludeProgramsParam:
             in: query
-            name: exclude_cohorts
+            name: exclude_programs
             style: pipeDelimited
-            description: A list of cohorts that will be excluded from results
+            description: A list of programs that will be excluded from results
             example: SYNTHETIC-1
             schema:
                 $ref: '#/components/schemas/Fields'
