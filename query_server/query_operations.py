@@ -297,8 +297,8 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             # However, that part isn't covered in this PR (it's in DIG-1372 (https://candig.atlassian.net/browse/DIG-1372))
             # and does not yet function
             # genomic_query_info = htsget['query_info']
-            # for cohort in genomic_query_info:
-            #    sample_ids = genomic_query_info[cohort]
+            # for program in genomic_query_info:
+            #    sample_ids = genomic_query_info[program]
 
             htsget_found_donors = {}
             responses = htsget['response'] if 'response' in htsget else []
@@ -354,16 +354,16 @@ def genomic_completeness():
         headers[k] = request.headers[k]
     headers["X-Service-Token"] = config.SERVICE_TOKEN
 
-    cohorts = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/cohorts",
+    programs = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
             # Reuse their bearer token
-            headers=headers), 'HTSGet cohorts')
+            headers=headers), 'HTSGet programs')
     retVal = {}
-    for program_id in cohorts:
-        cohort = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/cohorts/{program_id}",
+    for program_id in programs:
+        program = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs/{program_id}",
         # Reuse their bearer token
-        headers=headers), 'HTSGet cohort statistics')
+        headers=headers), 'HTSGet program statistics')
         if program_id not in retVal:
-            retVal[program_id] = cohort["statistics"]
+            retVal[program_id] = program["statistics"]
 
     return retVal, 200
 
