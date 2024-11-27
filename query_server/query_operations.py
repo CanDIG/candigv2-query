@@ -1,8 +1,9 @@
-from flask import request, Flask
+from flask import Flask
 import config
 import copy
 import re
 import requests
+import connexion
 import secrets
 import urllib
 from authx.auth import get_user_id, get_auth_token
@@ -44,8 +45,8 @@ def safe_get_response_json(response, name):
 def get_headers():
     # Add a service token to the headers so that other services will know this is from the query service:
     headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
+    for k in connexion.request.headers.keys():
+        headers[k] = connexion.request.headers[k]
     headers["X-Service-Token"] = config.SERVICE_TOKEN
     return headers
 
@@ -522,7 +523,7 @@ def whoami():
     # Grab information about the currently logged-in user
     logger.debug(config.OPA_URL)
     logger.debug(config.AUTHZ)
-    token = get_auth_token(request)
+    token = get_auth_token(connexion.request)
     headers = {
         "Authorization": f"Bearer {token}"
     }
@@ -536,4 +537,4 @@ def whoami():
             }
         )
     logger.debug(response)
-    return { 'key': get_user_id(request, opa_url = config.OPA_URL) }
+    return { 'key': get_user_id(connexion.request, opa_url = config.OPA_URL) }
