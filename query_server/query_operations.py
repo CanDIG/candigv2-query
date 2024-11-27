@@ -34,10 +34,11 @@ def get_service_info():
         "version": "0.1.0"
     }
 
-def safe_get_request_json(request, name):
-    if not request.ok:
-        raise Exception(f"Could not get {name} response: {request.status_code} {request.text}")
-    return request.json()
+
+def safe_get_response_json(response, name):
+    if not response.ok:
+        raise Exception(f"Could not get {name} response: {response.status_code} {response.text}")
+    return response.json()
 
 # Grab a list of donors matching a given filter from the given URL
 def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type=None, keep_all=False):
@@ -52,7 +53,7 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type
         if therapy_type != None:
             parameters['systemic_therapy_type'] = therapy_type
         treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
-        results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
+        results = safe_get_response_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
         if keep_all:
             all_results.extend(results)
@@ -65,7 +66,7 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type
         if therapy_type != None:
             parameters['systemic_therapy_type'] = therapy_type
         treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
-        results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
+        results = safe_get_response_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
         all_results.extend(results)
     return permissible_donors, all_results
@@ -132,7 +133,7 @@ def query_htsget_gene(headers, gene_array):
             }
         }
 
-        return safe_get_request_json(requests.post(
+        return safe_get_response_json(requests.post(
             f"{config.HTSGET_URL}/beacon/v2/g_variants",
             headers=headers,
             json=payload), 'HTSGet Gene')
@@ -152,7 +153,7 @@ def query_htsget_pos(headers, assembly, chrom, start=0, end=10000000):
         }
     }
 
-    return safe_get_request_json(requests.post(
+    return safe_get_response_json(requests.post(
         f"{config.HTSGET_URL}/beacon/v2/g_variants",
         headers=headers,
         json=payload), 'HTSGet position')
@@ -287,7 +288,7 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
 
             # We need to be able to map specimens, so we'll grab it from Katsu
             specimen_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
-            specimen_query = safe_get_request_json(specimen_query_req, 'Katsu sample registrations')
+            specimen_query = safe_get_response_json(specimen_query_req, 'Katsu sample registrations')
             specimen_mapping = {}
             for specimen in specimen_query['items']:
                 specimen_mapping[specimen['submitter_sample_id']] = (specimen['submitter_donor_id'], specimen['tumour_normal_designation'])
@@ -354,12 +355,12 @@ def genomic_completeness():
         headers[k] = request.headers[k]
     headers["X-Service-Token"] = config.SERVICE_TOKEN
 
-    programs = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
+    programs = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
             # Reuse their bearer token
             headers=headers), 'HTSGet programs')
     retVal = {}
     for program_id in programs:
-        program = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs/{program_id}",
+        program = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs/{program_id}",
         # Reuse their bearer token
         headers=headers), 'HTSGet program statistics')
         if program_id not in retVal:
@@ -371,7 +372,7 @@ def genomic_completeness():
 def discovery_programs():
     # Grab all programs from Katsu
     url = f"{config.KATSU_URL}/v3/discovery/programs/"
-    r = safe_get_request_json(requests.get(url), 'Katsu sample registrations')
+    r = safe_get_response_json(requests.get(url), 'Katsu sample registrations')
 
     # Aggregate all of the programs' return values into one value for the entire site
     site_summary_stats = {
@@ -464,7 +465,7 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
         params[param[1]] = param[0]
 
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
-    donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
+    donors = safe_get_response_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
 
     # Cross reference with HTSGet, if necessary
     if gene != "" or chrom != "":
