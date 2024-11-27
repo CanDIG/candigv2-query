@@ -8,7 +8,7 @@ from config import PORT, DEBUG_MODE
 candigv2_logging.logging.initialize()
 
 # Create the application instance
-app = connexion.FlaskApp(__name__, specification_dir='./', options={"swagger_url": "/api"})
+app = connexion.App(__name__, specification_dir='./')
 app.app.config['SECRET_KEY'] = secrets.token_bytes(32)
 CORS(app.app)
 
