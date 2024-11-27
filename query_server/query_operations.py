@@ -40,6 +40,16 @@ def safe_get_response_json(response, name):
         raise Exception(f"Could not get {name} response: {response.status_code} {response.text}")
     return response.json()
 
+
+def get_headers():
+    # Add a service token to the headers so that other services will know this is from the query service:
+    headers = {}
+    for k in request.headers.keys():
+        headers[k] = request.headers[k]
+    headers["X-Service-Token"] = config.SERVICE_TOKEN
+    return headers
+
+
 # Grab a list of donors matching a given filter from the given URL
 def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type=None, keep_all=False):
     permissible_donors = set()
@@ -218,21 +228,13 @@ def format_query_response(donors, genomic_query, summary_stats, page, page_size)
 
 @app.route('/query')
 def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_programs=[], session_id=""):
-    # Add a service token to the headers so that other services will know this is from the query service:
-    headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
-    headers["X-Service-Token"] = config.SERVICE_TOKEN
+    headers = get_headers()
 
     # NB: We're still doing table joins here, which is probably not where we want to do them
     # We're grabbing (and storing in memory) all the donor data in Katsu with the below request
 
     # Query the appropriate Katsu endpoint
     url = f"{config.KATSU_URL}/v3/authorized/query/"
-    headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
-    headers["X-Service-Token"] = config.SERVICE_TOKEN
 
     param_mapping = [
         (treatment, "treatment_type"),
@@ -349,11 +351,7 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
 
 @app.route('/genomic_completeness')
 def genomic_completeness():
-    # Add a service token to the headers so that Katsu will know this is from the query service:
-    headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
-    headers["X-Service-Token"] = config.SERVICE_TOKEN
+    headers = get_headers()
 
     programs = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
             # Reuse their bearer token
@@ -445,10 +443,7 @@ def discovery_programs():
 @app.route('/discovery/query')
 def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_programs=[]):
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
-    headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
-    headers["X-Service-Token"] = config.SERVICE_TOKEN
+    headers = get_headers()
 
     param_mapping = [
         (treatment, "treatment_type"),
