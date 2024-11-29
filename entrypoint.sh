@@ -9,4 +9,4 @@ if [[ -f "initial_setup" ]]; then
 fi
 
 cd query_server
-gunicorn server:app
+gunicorn -k uvicorn.workers.UvicornWorker server:app
