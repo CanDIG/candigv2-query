@@ -6,7 +6,7 @@ LABEL "candigv2"="query_app"
 
 USER root
 
-RUN groupadd -r candig && useradd -r -g candig candig
+RUN groupadd -r candig && useradd -rm candig -g candig
 
 RUN apt-get update
 
