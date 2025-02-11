@@ -373,10 +373,10 @@ def genomic_completeness():
 def discovery_programs():
     if not is_user_candig_authorized(connexion.request):
         return {"error": "User is not CanDIG authorized"}, 403
-
+    headers = get_headers()
     # Grab all programs from Katsu
     url = f"{config.KATSU_URL}/v3/discovery/programs/"
-    r = safe_get_response_json(requests.get(url), 'Katsu sample registrations')
+    r = safe_get_response_json(requests.get(url, headers=headers), 'Katsu sample registrations')
 
     # Aggregate all of the programs' return values into one value for the entire site
     site_summary_stats = {
