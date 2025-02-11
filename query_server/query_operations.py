@@ -6,7 +6,7 @@ import requests
 import connexion
 import secrets
 import urllib
-from authx.auth import get_user_id, get_auth_token
+from authx.auth import get_user_id, get_auth_token, is_user_candig_authorized
 from candigv2_logging.logging import CanDIGLogger
 
 
@@ -352,6 +352,8 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
 
 @app.route('/genomic_completeness')
 def genomic_completeness():
+    if not is_user_candig_authorized(connexion.request):
+        return {"error": "User is not CanDIG authorized"}, 403
     headers = get_headers()
 
     programs = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
@@ -369,9 +371,12 @@ def genomic_completeness():
 
 @app.route('/discovery/programs')
 def discovery_programs():
+    if not is_user_candig_authorized(connexion.request):
+        return {"error": "User is not CanDIG authorized"}, 403
+    headers = get_headers()
     # Grab all programs from Katsu
     url = f"{config.KATSU_URL}/v3/discovery/programs/"
-    r = safe_get_response_json(requests.get(url), 'Katsu sample registrations')
+    r = safe_get_response_json(requests.get(url, headers=headers), 'Katsu sample registrations')
 
     # Aggregate all of the programs' return values into one value for the entire site
     site_summary_stats = {
@@ -443,6 +448,9 @@ def discovery_programs():
 
 @app.route('/discovery/query')
 def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_programs=[]):
+    if not is_user_candig_authorized(connexion.request):
+        return {"error": "User is not CanDIG authorized"}, 403
+
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = get_headers()
 
