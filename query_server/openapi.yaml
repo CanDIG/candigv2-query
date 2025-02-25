@@ -101,6 +101,22 @@ paths:
                                 $ref: '#/components/schemas/DiscoveryProgramBody'
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
+    /discovery:
+        get:
+            summary: Get discovery overview endpoint calls
+            operationId: query_operations.discovery
+            parameters:
+                - $ref: "#/components/parameters/discoveryTargetPathParam"
+                - $ref: "#/components/parameters/discoveryTargetServiceParam"
+            responses:
+                200:
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscoveryResponse'
+                5XX:
+                    $ref: "#/components/responses/5xxServerError"
     /whoami:
         get:
             summary: Retrieve the user key (usually the email) for the currently logged-in user
@@ -202,6 +218,19 @@ components:
             required: false
             schema:
                 $ref: '#/components/schemas/IntField'
+        discoveryTargetServiceParam:
+            name: targetService
+            in: query
+            required: false
+            schema:
+                type: string
+                default: katsu
+        discoveryTargetPathParam:
+            name: targetPath
+            in: query
+            required: false
+            schema:
+                type: string
 #        sessionIDParam:
 #            in: query
 #            name: session_id
@@ -256,6 +285,9 @@ components:
                 programs:
                     type: array
                     description: Per-program summary statistics
+        DiscoveryResponse:
+            type: object
+            additionalProperties: true
         UserInfo:
             type: object
             description: Information about a user
