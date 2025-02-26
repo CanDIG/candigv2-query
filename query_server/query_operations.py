@@ -6,6 +6,7 @@ import requests
 import connexion
 import secrets
 import urllib
+from flask import request, Response
 from authx.auth import get_user_id, get_auth_token, is_user_candig_authorized
 from candigv2_logging.logging import CanDIGLogger
 
@@ -40,7 +41,6 @@ def safe_get_response_json(response, name):
     if not response.ok:
         raise Exception(f"Could not get {name} response: {response.status_code} {response.text}")
     return response.json()
-
 
 def get_headers():
     # Add a service token to the headers so that other services will know this is from the query service:
@@ -445,6 +445,31 @@ def discovery_programs():
     }
 
     return fix_dicts(ret_val), 200
+
+@app.route('/discovery')
+def discovery():
+    if not is_user_candig_authorized(connexion.request):
+        return {"error": "User is not CanDIG authorized"}, 403
+
+    headers = get_headers()
+    headers.pop("Authorization", None)
+    
+    # Extract from query parameters
+    target_service = request.args.get("targetService", "katsu")
+    target_path = request.args.get("targetPath")
+
+    if target_service == "katsu":
+        url = f"{config.KATSU_URL}/{target_path}"
+        response = requests.get(url, headers=headers)
+
+        outheaders = {"Content-Type": "application/json"}
+
+        if response.ok:
+            return Response(response=response.text, status=200, headers=outheaders)
+        else:
+            return {"error": "Failed to fetch data from Katsu"}, response.status_code
+
+    return {"error": "Invalid target service"}, 400
 
 @app.route('/discovery/query')
 def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_programs=[]):
