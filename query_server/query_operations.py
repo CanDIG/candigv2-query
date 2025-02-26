@@ -6,7 +6,7 @@ import requests
 import connexion
 import secrets
 import urllib
-from flask import request
+from flask import request, Response
 from authx.auth import get_user_id, get_auth_token, is_user_candig_authorized
 from candigv2_logging.logging import CanDIGLogger
 
@@ -462,8 +462,10 @@ def discovery():
         url = f"{config.KATSU_URL}/{target_path}"
         response = requests.get(url, headers=headers)
 
+        outheaders = {"Content-Type": "application/json"}
+
         if response.ok:
-            return response.text, 200
+            return Response(response=response.text, status=200, headers=outheaders)
         else:
             return {"error": "Failed to fetch data from Katsu"}, response.status_code
 
