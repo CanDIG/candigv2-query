@@ -452,7 +452,8 @@ def discovery():
         return {"error": "User is not CanDIG authorized"}, 403
 
     headers = get_headers()
-
+    headers.pop("Authorization", None)
+    
     # Extract from query parameters
     target_service = request.args.get("targetService", "katsu")
     target_path = request.args.get("targetPath")
@@ -460,8 +461,11 @@ def discovery():
     if target_service == "katsu":
         url = f"{config.KATSU_URL}/{target_path}"
         response = requests.get(url, headers=headers)
-        ret_val = safe_get_response_json(response, "Katsu discovery")
-        return ret_val, 200
+
+        if response.ok:
+            return response.text, 200
+        else:
+            return {"error": "Failed to fetch data from Katsu"}, response.status_code
 
     return {"error": "Invalid target service"}, 400
 
