@@ -350,10 +350,24 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
 
     return format_query_response(donors, genomic_query, summary_stats, page, page_size)
 
-@app.route('/genomic_completeness')
-def genomic_completeness():
+
+def is_discovery_allowed():
+    if "X-Service-Token" in connexion.request.headers:
+        if verify_service_token(service="federation", token=connexion.request.headers["X-Service-Token"]):
+            return True, 200
+        else:
+            return {"error": "Request claims to be from federation but it's not"}, 403
     if not is_user_candig_authorized(connexion.request):
         return {"error": "User is not CanDIG authorized"}, 403
+    return True, 200
+
+
+@app.route('/genomic_completeness')
+def genomic_completeness():
+    is_allowed, status_code = is_discovery_allowed()
+    if status_code != 200:
+        return is_allowed, status_code
+
     headers = get_headers()
 
     programs = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
@@ -371,8 +385,10 @@ def genomic_completeness():
 
 @app.route('/discovery/programs')
 def discovery_programs():
-    if not is_user_candig_authorized(connexion.request):
-        return {"error": "User is not CanDIG authorized"}, 403
+    is_allowed, status_code = is_discovery_allowed()
+    if status_code != 200:
+        return is_allowed, status_code
+
     headers = get_headers()
     # Grab all programs from Katsu
     url = f"{config.KATSU_URL}/v3/discovery/programs/"
@@ -448,12 +464,13 @@ def discovery_programs():
 
 @app.route('/discovery')
 def discovery():
-    if not is_user_candig_authorized(connexion.request):
-        return {"error": "User is not CanDIG authorized"}, 403
+    is_allowed, status_code = is_discovery_allowed()
+    if status_code != 200:
+        return is_allowed, status_code
 
     headers = get_headers()
     headers.pop("Authorization", None)
-    
+
     # Extract from query parameters
     target_service = request.args.get("targetService", "katsu")
     target_path = request.args.get("targetPath")
@@ -473,8 +490,9 @@ def discovery():
 
 @app.route('/discovery/query')
 def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_programs=[]):
-    if not is_user_candig_authorized(connexion.request):
-        return {"error": "User is not CanDIG authorized"}, 403
+    is_allowed, status_code = is_discovery_allowed()
+    if status_code != 200:
+        return is_allowed, status_code
 
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = get_headers()
