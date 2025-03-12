@@ -7,7 +7,7 @@ import connexion
 import secrets
 import urllib
 from flask import request, Response
-from authx.auth import get_user_id, get_auth_token, is_user_candig_authorized
+from authx.auth import get_user_id, get_auth_token, is_user_candig_authorized, verify_service_token
 from candigv2_logging.logging import CanDIGLogger
 
 
