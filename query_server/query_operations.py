@@ -353,8 +353,10 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
 
 def is_discovery_allowed():
     if "X-Service-Token" in connexion.request.headers:
-        if verify_service_token(service="federation", token=connexion.request.headers["X-Service-Token"]):
-            return True, 200
+        tokens = connexion.request.headers["X-Service-Token"].split(",")
+        for token in tokens:
+            if verify_service_token(service="federation", token=token):
+                return True, 200
         else:
             return {"error": "Request claims to be from federation but it's not"}, 403
     if not is_user_candig_authorized(connexion.request):
