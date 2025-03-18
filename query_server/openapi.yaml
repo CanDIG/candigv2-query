@@ -36,7 +36,7 @@ paths:
                 - $ref: "#/components/parameters/assemblyParam"
                 - $ref: "#/components/parameters/pageSizeParam"
                 - $ref: "#/components/parameters/pageParam"
-                - $ref: "#/components/parameters/excludeCohortsParam"
+                - $ref: "#/components/parameters/excludeProgramsParam"
             operationId: query_operations.query
             responses:
                 200:
@@ -91,7 +91,7 @@ paths:
                 - $ref: "#/components/parameters/chrParam"
                 - $ref: "#/components/parameters/geneParam"
                 - $ref: "#/components/parameters/assemblyParam"
-                - $ref: "#/components/parameters/excludeCohortsParam"
+                - $ref: "#/components/parameters/excludeProgramsParam"
             responses:
                 200:
                     description: Summary statistics
@@ -99,6 +99,22 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/DiscoveryProgramBody'
+                5XX:
+                    $ref: "#/components/responses/5xxServerError"
+    /discovery:
+        get:
+            summary: Get discovery overview endpoint calls
+            operationId: query_operations.discovery
+            parameters:
+                - $ref: "#/components/parameters/discoveryTargetPathParam"
+                - $ref: "#/components/parameters/discoveryTargetServiceParam"
+            responses:
+                200:
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscoveryResponse'
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
     /whoami:
@@ -115,7 +131,7 @@ paths:
                                 $ref: '#/components/schemas/UserInfo'
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
-                    
+
 components:
     parameters:
         treatmentParam:
@@ -178,11 +194,11 @@ components:
             example: hg38
             schema:
                 $ref: '#/components/schemas/Field'
-        excludeCohortsParam:
+        excludeProgramsParam:
             in: query
-            name: exclude_cohorts
+            name: exclude_programs
             style: pipeDelimited
-            description: A list of cohorts that will be excluded from results
+            description: A list of programs that will be excluded from results
             example: SYNTHETIC-1
             schema:
                 $ref: '#/components/schemas/Fields'
@@ -202,6 +218,19 @@ components:
             required: false
             schema:
                 $ref: '#/components/schemas/IntField'
+        discoveryTargetServiceParam:
+            name: targetService
+            in: query
+            required: false
+            schema:
+                type: string
+                default: katsu
+        discoveryTargetPathParam:
+            name: targetPath
+            in: query
+            required: false
+            schema:
+                type: string
 #        sessionIDParam:
 #            in: query
 #            name: session_id
@@ -256,6 +285,9 @@ components:
                 programs:
                     type: array
                     description: Per-program summary statistics
+        DiscoveryResponse:
+            type: object
+            additionalProperties: true
         UserInfo:
             type: object
             description: Information about a user

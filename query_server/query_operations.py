@@ -1,11 +1,13 @@
-from flask import request, Flask
+from flask import Flask
 import config
 import copy
 import re
 import requests
+import connexion
 import secrets
 import urllib
-from authx.auth import get_user_id, get_auth_token
+from flask import request, Response
+from authx.auth import get_user_id, get_auth_token, is_user_candig_authorized, verify_service_token
 from candigv2_logging.logging import CanDIGLogger
 
 
@@ -34,10 +36,20 @@ def get_service_info():
         "version": "0.1.0"
     }
 
-def safe_get_request_json(request, name):
-    if not request.ok:
-        raise Exception(f"Could not get {name} response: {request.status_code} {request.text}")
-    return request.json()
+
+def safe_get_response_json(response, name):
+    if not response.ok:
+        raise Exception(f"Could not get {name} response: {response.status_code} {response.text}")
+    return response.json()
+
+def get_headers():
+    # Add a service token to the headers so that other services will know this is from the query service:
+    headers = {}
+    for k in connexion.request.headers.keys():
+        headers[k] = connexion.request.headers[k]
+    headers["X-Service-Token"] = config.SERVICE_TOKEN
+    return headers
+
 
 # Grab a list of donors matching a given filter from the given URL
 def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type=None, keep_all=False):
@@ -52,7 +64,7 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type
         if therapy_type != None:
             parameters['systemic_therapy_type'] = therapy_type
         treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
-        results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
+        results = safe_get_response_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
         if keep_all:
             all_results.extend(results)
@@ -65,7 +77,7 @@ def get_donors_from_katsu(url, param_name, parameter_list, headers, therapy_type
         if therapy_type != None:
             parameters['systemic_therapy_type'] = therapy_type
         treatments = requests.get(f"{url}?{urllib.parse.urlencode(parameters)}", headers=headers)
-        results = safe_get_request_json(treatments, f'Katsu {param_name}')['items']
+        results = safe_get_response_json(treatments, f'Katsu {param_name}')['items']
         permissible_donors |= set([result['submitter_donor_id'] for result in results])
         all_results.extend(results)
     return permissible_donors, all_results
@@ -81,7 +93,7 @@ def get_summary_stats(donors, primary_sites, treatments):
     age_at_diagnosis = {}
     donors_by_id = {}
     primary_site_count = {}
-    patients_per_cohort = {}
+    patients_per_program = {}
     treatment_type_count = {}
     for donor in donors:
         # A donor's date of birth is defined as the (negative) interval between actual DOB and the date of first diagnosis
@@ -98,7 +110,7 @@ def get_summary_stats(donors, primary_sites, treatments):
                 add_or_increment(age_at_diagnosis, f'{age}-{age+9} Years')
 
         program_id = donor['program_id']
-        add_or_increment(patients_per_cohort, program_id)
+        add_or_increment(patients_per_program, program_id)
 
         # primary sites
         if donor['submitter_donor_id'] in primary_sites:
@@ -116,7 +128,7 @@ def get_summary_stats(donors, primary_sites, treatments):
         'age_at_diagnosis': age_at_diagnosis,
         'treatment_type_count': treatment_type_count,
         'primary_site_count': primary_site_count,
-        'patients_per_cohort': patients_per_cohort
+        'patients_per_program': patients_per_program
     }
 
 def query_htsget_gene(headers, gene_array):
@@ -132,7 +144,7 @@ def query_htsget_gene(headers, gene_array):
             }
         }
 
-        return safe_get_request_json(requests.post(
+        return safe_get_response_json(requests.post(
             f"{config.HTSGET_URL}/beacon/v2/g_variants",
             headers=headers,
             json=payload), 'HTSGet Gene')
@@ -152,7 +164,7 @@ def query_htsget_pos(headers, assembly, chrom, start=0, end=10000000):
         }
     }
 
-    return safe_get_request_json(requests.post(
+    return safe_get_response_json(requests.post(
         f"{config.HTSGET_URL}/beacon/v2/g_variants",
         headers=headers,
         json=payload), 'HTSGet position')
@@ -216,29 +228,21 @@ def format_query_response(donors, genomic_query, summary_stats, page, page_size)
     return fix_dicts(full_data), 200
 
 @app.route('/query')
-def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_cohorts=[], session_id=""):
-    # Add a service token to the headers so that other services will know this is from the query service:
-    headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
-    headers["X-Service-Token"] = config.SERVICE_TOKEN
+def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_programs=[], session_id=""):
+    headers = get_headers()
 
     # NB: We're still doing table joins here, which is probably not where we want to do them
     # We're grabbing (and storing in memory) all the donor data in Katsu with the below request
 
     # Query the appropriate Katsu endpoint
     url = f"{config.KATSU_URL}/v3/authorized/query/"
-    headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
-    headers["X-Service-Token"] = config.SERVICE_TOKEN
 
     param_mapping = [
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
         (drug_name, "systemic_therapy_drug_name"),
         (systemic_therapy_type, "systemic_therapy_type"),
-        (exclude_cohorts, "exclude_cohorts")
+        (exclude_programs, "exclude_programs")
     ]
     params = {
         'page_size': PAGE_SIZE
@@ -261,8 +265,8 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             raise Exception(err_msg)
     donors = donors_req.json()['items']
 
-    # Filter on excluded cohorts
-    donors = [donor for donor in donors if donor['program_id'] not in exclude_cohorts]
+    # Filter on excluded programs
+    donors = [donor for donor in donors if donor['program_id'] not in exclude_programs]
 
     # Note: We get three extra things from /authorized/query that aren't part of the Donors object:
     # 1) submitter_sample_ids
@@ -287,7 +291,7 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
 
             # We need to be able to map specimens, so we'll grab it from Katsu
             specimen_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
-            specimen_query = safe_get_request_json(specimen_query_req, 'Katsu sample registrations')
+            specimen_query = safe_get_response_json(specimen_query_req, 'Katsu sample registrations')
             specimen_mapping = {}
             for specimen in specimen_query['items']:
                 specimen_mapping[specimen['submitter_sample_id']] = (specimen['submitter_donor_id'], specimen['tumour_normal_designation'])
@@ -297,8 +301,8 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             # However, that part isn't covered in this PR (it's in DIG-1372 (https://candig.atlassian.net/browse/DIG-1372))
             # and does not yet function
             # genomic_query_info = htsget['query_info']
-            # for cohort in genomic_query_info:
-            #    sample_ids = genomic_query_info[cohort]
+            # for program in genomic_query_info:
+            #    sample_ids = genomic_query_info[program]
 
             htsget_found_donors = {}
             responses = htsget['response'] if 'response' in htsget else []
@@ -346,37 +350,51 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
 
     return format_query_response(donors, genomic_query, summary_stats, page, page_size)
 
+
+def is_discovery_allowed():
+    if "X-Service-Token" in connexion.request.headers:
+        tokens = connexion.request.headers["X-Service-Token"].split(",")
+        for token in tokens:
+            if verify_service_token(service="federation", token=token):
+                return True, 200
+        else:
+            return {"error": "Request claims to be from federation but it's not"}, 403
+    if not is_user_candig_authorized(connexion.request):
+        return {"error": "User is not CanDIG authorized"}, 403
+    return True, 200
+
+
 @app.route('/genomic_completeness')
 def genomic_completeness():
-    # Add a service token to the headers so that Katsu will know this is from the query service:
-    headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
-    headers["X-Service-Token"] = config.SERVICE_TOKEN
+    is_allowed, status_code = is_discovery_allowed()
+    if status_code != 200:
+        return is_allowed, status_code
 
-    samples = safe_get_request_json(requests.get(f"{config.HTSGET_URL}/htsget/v1/samples",
+    headers = get_headers()
+
+    programs = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
             # Reuse their bearer token
-            headers=headers), 'HTSGet cohort statistics')
-
+            headers=headers), 'HTSGet programs')
     retVal = {}
-    for sample in samples:
-        program_id = sample['cohort']
+    for program_id in programs:
+        program = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs/{program_id}",
+        # Reuse their bearer token
+        headers=headers), 'HTSGet program statistics')
         if program_id not in retVal:
-            retVal[program_id] = { 'genomes': 0, 'transcriptomes': 0, 'all': 0 }
-        if len(sample['genomes']) > 0 and len(sample['transcriptomes']) > 0:
-            retVal[program_id]['all'] += 1
-        if len(sample['genomes']) > 0:
-            retVal[program_id]['genomes'] += 1
-        if len(sample['transcriptomes']) > 0:
-            retVal[program_id]['transcriptomes'] += 1
+            retVal[program_id] = program["statistics"]
 
     return retVal, 200
 
 @app.route('/discovery/programs')
 def discovery_programs():
+    is_allowed, status_code = is_discovery_allowed()
+    if status_code != 200:
+        return is_allowed, status_code
+
+    headers = get_headers()
     # Grab all programs from Katsu
     url = f"{config.KATSU_URL}/v3/discovery/programs/"
-    r = safe_get_request_json(requests.get(url), 'Katsu sample registrations')
+    r = safe_get_response_json(requests.get(url, headers=headers), 'Katsu sample registrations')
 
     # Aggregate all of the programs' return values into one value for the entire site
     site_summary_stats = {
@@ -446,19 +464,46 @@ def discovery_programs():
 
     return fix_dicts(ret_val), 200
 
+@app.route('/discovery')
+def discovery():
+    is_allowed, status_code = is_discovery_allowed()
+    if status_code != 200:
+        return is_allowed, status_code
+
+    headers = get_headers()
+    headers.pop("Authorization", None)
+
+    # Extract from query parameters
+    target_service = request.args.get("targetService", "katsu")
+    target_path = request.args.get("targetPath")
+
+    if target_service == "katsu":
+        url = f"{config.KATSU_URL}/{target_path}"
+        response = requests.get(url, headers=headers)
+
+        outheaders = {"Content-Type": "application/json"}
+
+        if response.ok:
+            return Response(response=response.text, status=200, headers=outheaders)
+        else:
+            return {"error": "Failed to fetch data from Katsu"}, response.status_code
+
+    return {"error": "Invalid target service"}, 400
+
 @app.route('/discovery/query')
-def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_cohorts=[]):
+def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_programs=[]):
+    is_allowed, status_code = is_discovery_allowed()
+    if status_code != 200:
+        return is_allowed, status_code
+
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
-    headers = {}
-    for k in request.headers.keys():
-        headers[k] = request.headers[k]
-    headers["X-Service-Token"] = config.SERVICE_TOKEN
+    headers = get_headers()
 
     param_mapping = [
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
         (drug_name, "systemic_therapy_drug_name"),
-        (exclude_cohorts, "exclude_cohorts")
+        (exclude_programs, "exclude_programs")
     ]
     params = {
         "page_size": PAGE_SIZE
@@ -469,7 +514,7 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
         params[param[1]] = param[0]
 
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
-    donors = safe_get_request_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
+    donors = safe_get_response_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
 
     # Cross reference with HTSGet, if necessary
     if gene != "" or chrom != "":
@@ -505,12 +550,12 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
         'age_at_diagnosis': {},
         'treatment_type_count': {},
         'primary_site_count': {},
-        'patients_per_cohort': {}
+        'patients_per_program': {}
     }
     summary_stat_mapping = [
         ('age_at_diagnosis', 'age_at_diagnosis'),
         ('treatment_type_count', 'treatment_type'),
-        ('patients_per_cohort', 'program_id'),
+        ('patients_per_program', 'program_id'),
         ('primary_site_count', 'primary_site')
     ]
     for donor in donors:
@@ -531,7 +576,7 @@ def whoami():
     # Grab information about the currently logged-in user
     logger.debug(config.OPA_URL)
     logger.debug(config.AUTHZ)
-    token = get_auth_token(request)
+    token = get_auth_token(connexion.request)
     headers = {
         "Authorization": f"Bearer {token}"
     }
@@ -545,4 +590,4 @@ def whoami():
             }
         )
     logger.debug(response)
-    return { 'key': get_user_id(request, opa_url = config.OPA_URL) }
+    return { 'key': get_user_id(connexion.request, opa_url = config.OPA_URL) }
