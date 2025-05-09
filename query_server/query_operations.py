@@ -289,12 +289,12 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
 
-            # We need to be able to map specimens, so we'll grab it from Katsu
-            specimen_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
-            specimen_query = safe_get_response_json(specimen_query_req, 'Katsu sample registrations')
-            specimen_mapping = {}
-            for specimen in specimen_query['items']:
-                specimen_mapping[specimen['submitter_sample_id']] = (specimen['submitter_donor_id'], specimen['tumour_normal_designation'])
+            # We need to be able to map sample registrations, so we'll grab it from Katsu
+            samplereg_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
+            samplereg_query = safe_get_response_json(samplereg_query_req, 'Katsu sample registrations')
+            samplereg_mapping = {}
+            for samplereg in samplereg_query['items']:
+                samplereg_mapping[samplereg['submitter_sample_id']] = (samplereg['submitter_donor_id'], samplereg['tumour_normal_designation'])
 
             # genomic_query_info contains ALL matches from every dataset
             # This is meant to be used to fill out the summary stats ONLY
@@ -314,21 +314,21 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
                     id = case_data['biosampleId'].split('~')
                     if len(id) > 1:
                         case_data['program_id'] = id[0]
-                        submitter_specimen_id = id[1]
-                        case_data['submitter_specimen_id'] = submitter_specimen_id
-                        if submitter_specimen_id in specimen_mapping:
-                            case_data['donor_id'] = specimen_mapping[submitter_specimen_id][0]
-                            case_data['tumour_normal_designation'] = specimen_mapping[submitter_specimen_id][1]
+                        submitter_sample_id = id[1]
+                        case_data['submitter_sample_id'] = submitter_sample_id
+                        if submitter_sample_id in samplereg_mapping:
+                            case_data['donor_id'] = samplereg_mapping[submitter_sample_id][0]
+                            case_data['tumour_normal_designation'] = samplereg_mapping[submitter_sample_id][1]
                         else:
                             logger.error(f"Could not find donor mapping for {case_data}")
-                            case_data['donor_id'] = submitter_specimen_id
+                            case_data['donor_id'] = submitter_sample_id
                             case_data['tumour_normal_designation'] = 'Tumour'
                         htsget_found_donors[case_data['donor_id']] = 1
                     else:
                         logger.error(f"Could not parse biosampleId for {case_data}")
                         case_data['program_id'] = None
                         case_data['donor_id'] = None
-                        case_data['submitter_specimen_id'] = case_data['biosampleId']
+                        case_data['submitter_sample_id'] = case_data['biosampleId']
                         case_data['tumour_normal_designation'] = 'Tumour'
                     case_data['position'] = response['variation']['location']['interval']['start']['value']
             # Filter clinical results based on genomic results
@@ -501,11 +501,11 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
     # Cross reference with HTSGet, if necessary
     if gene != "" or chrom != "":
         # First, we need to map all Katsu-identified specimens
-        specimen_mapping = {}
+        samplereg_mapping = {}
         for donor in donors:
             if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
                 for sample_id in donor['submitter_sample_ids']:
-                    specimen_mapping[f"{donor['program_id']}~{sample_id}"] = donor
+                    samplereg_mapping[f"{donor['program_id']}~{sample_id}"] = donor
 
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
@@ -515,8 +515,8 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
                 for sample_id in htsget['query_info'][program_id]:
                     # NB: We're allowing the entire donor as long as any specimen matches -- is that what we want?
                     merged_id = f"{program_id}~{sample_id}"
-                    if merged_id in specimen_mapping:
-                        found_donor = specimen_mapping[merged_id]
+                    if merged_id in samplereg_mapping:
+                        found_donor = samplereg_mapping[merged_id]
                         htsget_found_donors[f"{found_donor['program_id']}~{found_donor['submitter_donor_id']}"] = 1
                     else:
                         logger.error(f"Could not find specimen identified in HTSGet: {merged_id}")
