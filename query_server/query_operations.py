@@ -398,17 +398,12 @@ def discovery_programs():
 
     # Aggregate all of the programs' return values into one value for the entire site
     site_summary_stats = {
-        'schemas_used': set(),
-        'schemas_not_used': set(),
         'required_but_missing': {},
-        'cases_missing_data': set(),
         'summary_cases': {
             'total_cases': 0,
             'complete_cases': 0
         }
     }
-    unused_schemas = set()
-    unused_initialized = False
     for program in r:
         if 'metadata' not in program:
             logger.error(f"Strange result from Katsu: no metadata in {program}")
@@ -417,13 +412,6 @@ def discovery_programs():
 
         # There's five metadata categories we care about:
         # schemas_used is a set, schemas_not_used is the inverse of that set
-        if not unused_initialized:
-            unused_initialized = True
-            unused_schemas = set(metadata['schemas_not_used'])
-        if 'schemas_used' in metadata:
-            site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
-        if 'cases_missing_data' in metadata:
-            site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
         if 'summary_cases' in metadata:
             try:
                 site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
@@ -449,12 +437,6 @@ def discovery_programs():
                     site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
         except Exception as ex:
             logger.error(f"Unable to parse required fields result from Katsu: {ex}")
-
-    for schema in site_summary_stats['schemas_used']:
-        unused_schemas.discard(schema)
-    site_summary_stats['schemas_not_used'] = list(unused_schemas)
-    site_summary_stats['schemas_used'] = list(site_summary_stats['schemas_used'])
-    site_summary_stats['cases_missing_data'] = list(site_summary_stats['cases_missing_data'])
 
     # Return both the site's aggregated return value and each individual programs'
     ret_val = {
