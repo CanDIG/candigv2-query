@@ -305,42 +305,35 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             #    sample_ids = genomic_query_info[program]
 
             htsget_found_donors = {}
-            responses = htsget['response'] if 'response' in htsget else []
-            for response in responses:
-                for case_data in response['caseLevelData']:
-                    if 'biosampleId' not in case_data:
-                        logger.error(f"Could not parse htsget response for {case_data}")
-                        continue
-                    id = case_data['biosampleId'].split('~')
-                    if len(id) > 1:
-                        case_data['program_id'] = id[0]
-                        submitter_sample_id = id[1]
-                        case_data['submitter_sample_id'] = submitter_sample_id
-                        if submitter_sample_id in samplereg_mapping:
-                            case_data['donor_id'] = samplereg_mapping[submitter_sample_id][0]
-                            case_data['tumour_normal_designation'] = samplereg_mapping[submitter_sample_id][1]
-                        else:
-                            logger.error(f"Could not find donor mapping for {case_data}")
-                            case_data['donor_id'] = submitter_sample_id
-                            case_data['tumour_normal_designation'] = 'Tumour'
-                        htsget_found_donors[case_data['donor_id']] = 1
+            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else []
+            caseLevelData = []
+            for program in response.keys():
+                for item in response[program]:
+                    submitter_sample_id = item["submitter_sample_id"]
+                    case_data = {
+                        "program_id": program,
+                        "submitter_sample_id": submitter_sample_id,
+                        "variant_count": item["variant_count"]
+                    }
+                    if submitter_sample_id in samplereg_mapping:
+                        case_data['donor_id'] = samplereg_mapping[submitter_sample_id][0]
+                        case_data['tumour_normal_designation'] = samplereg_mapping[submitter_sample_id][1]
                     else:
-                        logger.error(f"Could not parse biosampleId for {case_data}")
-                        case_data['program_id'] = None
-                        case_data['donor_id'] = None
-                        case_data['submitter_sample_id'] = case_data['biosampleId']
+                        logger.error(f"Could not find donor mapping for {case_data}")
+                        case_data['donor_id'] = submitter_sample_id
                         case_data['tumour_normal_designation'] = 'Tumour'
-                    case_data['position'] = response['variation']['location']['interval']['start']['value']
+                    htsget_found_donors[case_data['donor_id']] = 1
+                    caseLevelData.append(case_data)
+
             # Filter clinical results based on genomic results
             donors = [donor for donor in donors if donor['submitter_donor_id'] in htsget_found_donors]
             katsu_allowed_donors = {}
             for donor in donors:
                 katsu_allowed_donors[f"{donor['program_id']}~{donor['submitter_donor_id']}"] = 1
-            for response in htsget['response']:
-                for case_data in response['caseLevelData']:
-                    if ('donor_id' in case_data and 'program_id' in case_data and
-                        f"{case_data['program_id']}~{case_data['donor_id']}" in katsu_allowed_donors):
-                        genomic_query.append(case_data)
+            for case_data in caseLevelData:
+                if ('donor_id' in case_data and 'program_id' in case_data and
+                    f"{case_data['program_id']}~{case_data['donor_id']}" in katsu_allowed_donors):
+                    genomic_query.append(case_data)
 
         except Exception as ex:
             logger.error(f"Error while reading HTSGet response: {ex}")
