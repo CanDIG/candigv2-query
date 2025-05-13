@@ -512,7 +512,7 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
                         found_donor = samplereg_mapping[merged_id]
                         htsget_found_donors[f"{found_donor['program_id']}~{found_donor['submitter_donor_id']}"] = 1
                     else:
-                        logger.error(f"Could not find specimen identified in HTSGet: {merged_id}")
+                        logger.error(f"Could not find sample registration identified in HTSGet: {merged_id}")
             # Filter clinical results based on genomic results
             donors = [donor for donor in donors if f"{donor['program_id']}~{donor['submitter_donor_id']}" in htsget_found_donors]
 
