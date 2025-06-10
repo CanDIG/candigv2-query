@@ -549,20 +549,4 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
 @app.route('/whoami')
 def whoami():
     # Grab information about the currently logged-in user
-    logger.debug(config.OPA_URL)
-    logger.debug(config.AUTHZ)
-    token = get_auth_token(connexion.request)
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-    response = requests.post(
-        config.OPA_URL + f"/v1/data/idp/user_key",
-        headers=headers,
-        json={
-            "input": {
-                    "token": token
-                }
-            }
-        )
-    logger.debug(response)
     return { 'key': get_user_id(connexion.request, opa_url = config.OPA_URL) }
