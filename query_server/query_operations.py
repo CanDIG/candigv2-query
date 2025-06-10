@@ -289,12 +289,12 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
 
-            # We need to be able to map specimens, so we'll grab it from Katsu
-            specimen_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
-            specimen_query = safe_get_response_json(specimen_query_req, 'Katsu sample registrations')
-            specimen_mapping = {}
-            for specimen in specimen_query['items']:
-                specimen_mapping[specimen['submitter_sample_id']] = (specimen['submitter_donor_id'], specimen['tumour_normal_designation'])
+            # We need to be able to map sample registrations, so we'll grab it from Katsu
+            samplereg_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
+            samplereg_query = safe_get_response_json(samplereg_query_req, 'Katsu sample registrations')
+            samplereg_mapping = {}
+            for samplereg in samplereg_query['items']:
+                samplereg_mapping[samplereg['submitter_sample_id']] = (samplereg['submitter_donor_id'], samplereg['tumour_normal_designation'])
 
             # genomic_query_info contains ALL matches from every dataset
             # This is meant to be used to fill out the summary stats ONLY
@@ -305,42 +305,35 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             #    sample_ids = genomic_query_info[program]
 
             htsget_found_donors = {}
-            responses = htsget['response'] if 'response' in htsget else []
-            for response in responses:
-                for case_data in response['caseLevelData']:
-                    if 'biosampleId' not in case_data:
-                        logger.error(f"Could not parse htsget response for {case_data}")
-                        continue
-                    id = case_data['biosampleId'].split('~')
-                    if len(id) > 1:
-                        case_data['program_id'] = id[0]
-                        submitter_specimen_id = id[1]
-                        case_data['submitter_specimen_id'] = submitter_specimen_id
-                        if submitter_specimen_id in specimen_mapping:
-                            case_data['donor_id'] = specimen_mapping[submitter_specimen_id][0]
-                            case_data['tumour_normal_designation'] = specimen_mapping[submitter_specimen_id][1]
-                        else:
-                            logger.error(f"Could not find donor mapping for {case_data}")
-                            case_data['donor_id'] = submitter_specimen_id
-                            case_data['tumour_normal_designation'] = 'Tumour'
-                        htsget_found_donors[case_data['donor_id']] = 1
+            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else []
+            caseLevelData = []
+            for program in response.keys():
+                for item in response[program]:
+                    submitter_sample_id = item["submitter_sample_id"]
+                    case_data = {
+                        "program_id": program,
+                        "submitter_sample_id": submitter_sample_id,
+                        "variant_count": item["variant_count"]
+                    }
+                    if submitter_sample_id in samplereg_mapping:
+                        case_data['donor_id'] = samplereg_mapping[submitter_sample_id][0]
+                        case_data['tumour_normal_designation'] = samplereg_mapping[submitter_sample_id][1]
                     else:
-                        logger.error(f"Could not parse biosampleId for {case_data}")
-                        case_data['program_id'] = None
-                        case_data['donor_id'] = None
-                        case_data['submitter_specimen_id'] = case_data['biosampleId']
+                        logger.error(f"Could not find donor mapping for {case_data}")
+                        case_data['donor_id'] = submitter_sample_id
                         case_data['tumour_normal_designation'] = 'Tumour'
-                    case_data['position'] = response['variation']['location']['interval']['start']['value']
+                    htsget_found_donors[case_data['donor_id']] = 1
+                    caseLevelData.append(case_data)
+
             # Filter clinical results based on genomic results
             donors = [donor for donor in donors if donor['submitter_donor_id'] in htsget_found_donors]
             katsu_allowed_donors = {}
             for donor in donors:
                 katsu_allowed_donors[f"{donor['program_id']}~{donor['submitter_donor_id']}"] = 1
-            for response in htsget['response']:
-                for case_data in response['caseLevelData']:
-                    if ('donor_id' in case_data and 'program_id' in case_data and
-                        f"{case_data['program_id']}~{case_data['donor_id']}" in katsu_allowed_donors):
-                        genomic_query.append(case_data)
+            for case_data in caseLevelData:
+                if ('donor_id' in case_data and 'program_id' in case_data and
+                    f"{case_data['program_id']}~{case_data['donor_id']}" in katsu_allowed_donors):
+                    genomic_query.append(case_data)
 
         except Exception as ex:
             logger.error(f"Error while reading HTSGet response: {ex}")
@@ -398,17 +391,12 @@ def discovery_programs():
 
     # Aggregate all of the programs' return values into one value for the entire site
     site_summary_stats = {
-        'schemas_used': set(),
-        'schemas_not_used': set(),
         'required_but_missing': {},
-        'cases_missing_data': set(),
         'summary_cases': {
             'total_cases': 0,
             'complete_cases': 0
         }
     }
-    unused_schemas = set()
-    unused_initialized = False
     for program in r:
         if 'metadata' not in program:
             logger.error(f"Strange result from Katsu: no metadata in {program}")
@@ -417,13 +405,6 @@ def discovery_programs():
 
         # There's five metadata categories we care about:
         # schemas_used is a set, schemas_not_used is the inverse of that set
-        if not unused_initialized:
-            unused_initialized = True
-            unused_schemas = set(metadata['schemas_not_used'])
-        if 'schemas_used' in metadata:
-            site_summary_stats['schemas_used'] |= set(metadata['schemas_used'])
-        if 'cases_missing_data' in metadata:
-            site_summary_stats['cases_missing_data'] |= set(metadata['cases_missing_data'])
         if 'summary_cases' in metadata:
             try:
                 site_summary_stats['summary_cases']['complete_cases'] += metadata['summary_cases']['complete_cases']
@@ -449,12 +430,6 @@ def discovery_programs():
                     site_summary_stats['required_but_missing'][field] = copy.deepcopy(required_but_missing[field])
         except Exception as ex:
             logger.error(f"Unable to parse required fields result from Katsu: {ex}")
-
-    for schema in site_summary_stats['schemas_used']:
-        unused_schemas.discard(schema)
-    site_summary_stats['schemas_not_used'] = list(unused_schemas)
-    site_summary_stats['schemas_used'] = list(site_summary_stats['schemas_used'])
-    site_summary_stats['cases_missing_data'] = list(site_summary_stats['cases_missing_data'])
 
     # Return both the site's aggregated return value and each individual programs'
     ret_val = {
@@ -519,11 +494,11 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
     # Cross reference with HTSGet, if necessary
     if gene != "" or chrom != "":
         # First, we need to map all Katsu-identified specimens
-        specimen_mapping = {}
+        samplereg_mapping = {}
         for donor in donors:
             if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
                 for sample_id in donor['submitter_sample_ids']:
-                    specimen_mapping[f"{donor['program_id']}~{sample_id}"] = donor
+                    samplereg_mapping[f"{donor['program_id']}~{sample_id}"] = donor
 
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
@@ -533,11 +508,11 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
                 for sample_id in htsget['query_info'][program_id]:
                     # NB: We're allowing the entire donor as long as any specimen matches -- is that what we want?
                     merged_id = f"{program_id}~{sample_id}"
-                    if merged_id in specimen_mapping:
-                        found_donor = specimen_mapping[merged_id]
+                    if merged_id in samplereg_mapping:
+                        found_donor = samplereg_mapping[merged_id]
                         htsget_found_donors[f"{found_donor['program_id']}~{found_donor['submitter_donor_id']}"] = 1
                     else:
-                        logger.error(f"Could not find specimen identified in HTSGet: {merged_id}")
+                        logger.error(f"Could not find sample registration identified in HTSGet: {merged_id}")
             # Filter clinical results based on genomic results
             donors = [donor for donor in donors if f"{donor['program_id']}~{donor['submitter_donor_id']}" in htsget_found_donors]
 
@@ -574,20 +549,4 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
 @app.route('/whoami')
 def whoami():
     # Grab information about the currently logged-in user
-    logger.debug(config.OPA_URL)
-    logger.debug(config.AUTHZ)
-    token = get_auth_token(connexion.request)
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-    response = requests.post(
-        config.OPA_URL + f"/v1/data/idp/user_key",
-        headers=headers,
-        json={
-            "input": {
-                    "token": token
-                }
-            }
-        )
-    logger.debug(response)
     return { 'key': get_user_id(connexion.request, opa_url = config.OPA_URL) }
