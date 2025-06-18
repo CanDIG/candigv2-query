@@ -498,7 +498,7 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
         for donor in donors:
             if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
                 for sample_id in donor['submitter_sample_ids']:
-                    samplereg_mapping[f"{donor['program_id']}~{sample_id}"] = donor
+                    samplereg_mapping[sample_id] = donor
 
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
