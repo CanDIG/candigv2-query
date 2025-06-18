@@ -305,9 +305,11 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             #    sample_ids = genomic_query_info[program]
 
             htsget_found_donors = {}
-            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else []
+            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else {}
             caseLevelData = []
             for program in response.keys():
+                if type(response[program]) is not list:
+                    continue
                 for item in response[program]:
                     submitter_sample_id = item["submitter_sample_id"]
                     case_data = {
@@ -498,21 +500,25 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
         for donor in donors:
             if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
                 for sample_id in donor['submitter_sample_ids']:
-                    samplereg_mapping[f"{donor['program_id']}~{sample_id}"] = donor
+                    samplereg_mapping[sample_id] = donor
 
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
 
             htsget_found_donors = {}
-            for program_id in htsget['query_info']:
-                for sample_id in htsget['query_info'][program_id]:
-                    # NB: We're allowing the entire donor as long as any specimen matches -- is that what we want?
-                    merged_id = f"{program_id}~{sample_id}"
-                    if merged_id in samplereg_mapping:
-                        found_donor = samplereg_mapping[merged_id]
-                        htsget_found_donors[f"{found_donor['program_id']}~{found_donor['submitter_donor_id']}"] = 1
+            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else {}
+            for program in response.keys():
+                if type(response[program]) is not list:
+                    continue
+                for item in response[program]:
+                    submitter_sample_id = item["submitter_sample_id"]
+                    if submitter_sample_id in samplereg_mapping:
+                        donor_id = samplereg_mapping[submitter_sample_id][0]
+                        htsget_found_donors[donor_id] = 1
                     else:
-                        logger.error(f"Could not find sample registration identified in HTSGet: {merged_id}")
+                        logger.error(f"Could not find donor mapping for {item}")
+                        donor_id = submitter_sample_id
+                        htsget_found_donors[donor_id] = 1
             # Filter clinical results based on genomic results
             donors = [donor for donor in donors if f"{donor['program_id']}~{donor['submitter_donor_id']}" in htsget_found_donors]
 
