@@ -305,7 +305,7 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             #    sample_ids = genomic_query_info[program]
 
             htsget_found_donors = {}
-            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else []
+            response = htsget['estimatedResults'] if 'estimatedResults' in htsget and type(htsget['estimatedResults']) is list else []
             caseLevelData = []
             for program in response.keys():
                 for item in response[program]:
@@ -504,7 +504,7 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
             htsget = query_htsget(headers, gene, assembly, chrom)
 
             htsget_found_donors = {}
-            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else []
+            response = htsget['estimatedResults'] if 'estimatedResults' in htsget and type(htsget['estimatedResults']) is list else []
             for program in response.keys():
                 for item in response[program]:
                     submitter_sample_id = item["submitter_sample_id"]
