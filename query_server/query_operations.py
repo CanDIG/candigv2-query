@@ -256,12 +256,13 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
     donors_req = requests.get(full_url, headers=headers)
     if not donors_req.ok:
         if donors_req.status_code == 401:
-            # 401 Unauthorized: the user is not allowed to view any donors at this site
-            # The rest of the code should just pass quietly
-            return format_query_response([], [], get_summary_stats([], {}, {}), page, page_size)
+            # 401 Unauthorized: the token is invalid
+            ret_val = format_query_response([], [], get_summary_stats([], {}, {}), page, page_size)
+            return ret_val[0], 401
         else:
             err_msg = f"Could not got Katsu donors response: {donors_req.status_code} {donors_req.text}"
             logger.error(err_msg)
+            # Do not forward the response from Katsu in case of compromising information (due to X-Service-Token)
             raise Exception(err_msg)
     donors = donors_req.json()['items']
 
