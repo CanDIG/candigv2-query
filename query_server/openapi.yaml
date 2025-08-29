@@ -37,6 +37,7 @@ paths:
                 - $ref: "#/components/parameters/pageSizeParam"
                 - $ref: "#/components/parameters/pageParam"
                 - $ref: "#/components/parameters/excludeProgramsParam"
+                - $ref: "#/components/parameters/genomicDataTypesParam"
             operationId: query_operations.query
             responses:
                 200:
@@ -92,6 +93,7 @@ paths:
                 - $ref: "#/components/parameters/geneParam"
                 - $ref: "#/components/parameters/assemblyParam"
                 - $ref: "#/components/parameters/excludeProgramsParam"
+                - $ref: "#/components/parameters/genomicDataTypesParam" 
             responses:
                 200:
                     description: Summary statistics
@@ -200,6 +202,15 @@ components:
             style: pipeDelimited
             description: A list of programs that will be excluded from results
             example: SYNTHETIC-1
+            schema:
+                $ref: '#/components/schemas/Fields'
+        genomicDataTypesParam:
+            in: query
+            name: genomicDataTypes
+            style: pipeDelimited
+            description: A list of genomic data types to include in the query
+            example: genomes|variants
+            required: false
             schema:
                 $ref: '#/components/schemas/Fields'
         pageSizeParam:
