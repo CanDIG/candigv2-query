@@ -368,12 +368,12 @@ def genomic_completeness():
 
     headers = get_headers()
 
-    programs = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
+    programs = safe_get_response_json(requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/programs",
             # Reuse their bearer token
             headers=headers), 'HTSGet programs')
     retVal = {}
     for program_id in programs:
-        program = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs/{program_id}",
+        program = safe_get_response_json(requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/programs/{program_id}",
         # Reuse their bearer token
         headers=headers), 'HTSGet program statistics')
         if program_id not in retVal:
