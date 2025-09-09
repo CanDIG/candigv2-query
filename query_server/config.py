@@ -23,10 +23,20 @@ DEBUG_MODE = False
 if os.getenv("DEBUG_MODE", "1") == "1":
     DEBUG_MODE = True
 
+service_token_path = os.path.abspath(f"{os.path.dirname(os.path.realpath(__file__))}/../service_token")
 try:
-    SERVICE_TOKEN = create_service_token()
+    # We will need to create a long-lived service token to ensure that every request is coming from us
+    # To prevent concurrency issues, we'll generate one during startup and use it for every request (nb: insecure?)
+    if not os.path.isfile(service_token_path):
+        with open(service_token_path, "w") as service_token_file:
+            SERVICE_TOKEN = create_service_token()
+            service_token_file.write(SERVICE_TOKEN)
+    else:
+        with open(service_token_path, "r") as service_token_file:
+            SERVICE_TOKEN = service_token_file.read()
     if DEBUG_MODE:
         print(f"SERVICE_TOKEN: {SERVICE_TOKEN}")
+
 except:
     logger.error("Could not obtain a service token")
     SERVICE_TOKEN = ""
