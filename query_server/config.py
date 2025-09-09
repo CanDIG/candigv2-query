@@ -28,8 +28,8 @@ try:
     # We will need to create a long-lived service token to ensure that every request is coming from us
     # To prevent concurrency issues, we'll generate one during startup and use it for every request (nb: insecure?)
     if not os.path.isfile(service_token_path):
+        SERVICE_TOKEN = create_service_token()
         with open(service_token_path, "w") as service_token_file:
-            SERVICE_TOKEN = create_service_token()
             service_token_file.write(SERVICE_TOKEN)
     else:
         with open(service_token_path, "r") as service_token_file:
