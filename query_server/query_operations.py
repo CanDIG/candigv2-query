@@ -234,20 +234,20 @@ GENOMIC_TYPE_MAP = {
     "Genomes": "genomes"
 }
 
-def get_mapped_genomic_types(genomicDataTypes):
-    if isinstance(genomicDataTypes, str):
-        genomicDataTypes = genomicDataTypes.split("|")
-    return [GENOMIC_TYPE_MAP.get(dtype) for dtype in genomicDataTypes if GENOMIC_TYPE_MAP.get(dtype)]
+def get_mapped_genomic_types(genomic_data_types):
+    return [GENOMIC_TYPE_MAP.get(dtype) for dtype in genomic_data_types if GENOMIC_TYPE_MAP.get(dtype)]
     
 @app.route('/query')
 def query(
     treatment="", primary_site="", drug_name="", systemic_therapy_type="",
     chrom="", gene="", page=0, page_size=10, assembly="hg38",
-    exclude_programs=[], genomicDataTypes=[], session_id=""
+    exclude_programs=[], genomic_data_types=[], session_id=""
 ):
     headers = get_headers()
     url = f"{config.KATSU_URL}/v3/authorized/query/"
 
+    logger.warning(f"Query parameters: treatment={treatment}, primary_site={primary_site}, drug_name={drug_name}, systemic_therapy_type={systemic_therapy_type}, chrom={chrom}, gene={gene}, page={page}, page_size={page_size}, assembly={assembly}, exclude_programs={exclude_programs}, genomic_data_types={genomic_data_types}, session_id={session_id}")
+    
     # Map clinical filters
     param_mapping = [
         (treatment, "treatment_type"),
@@ -281,8 +281,8 @@ def query(
     # Prepare genomic data
     genomic_query = []
 
-    if gene != "" or chrom != "" or genomicDataTypes:
-        mapped_types = get_mapped_genomic_types(genomicDataTypes)
+    if gene != "" or chrom != "" or genomic_data_types != []:
+        mapped_types = get_mapped_genomic_types(genomic_data_types)
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
             samplereg_req = requests.get(
@@ -331,6 +331,9 @@ def query(
                             case_data['variants'] = sample_info.get('variants', [])
                             case_data['reads'] = sample_info.get('reads', [])
 
+                            logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
+                            logger.warning(f"Requested data types: {mapped_types}")
+                            logger.warning(f"Sample info: {sample_info}")
                             # OR filter: only include if any requested type exists
                             if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
                                 continue
@@ -350,7 +353,7 @@ def query(
 
         except Exception as ex:
             logger.error(f"Error while reading HTSGet response: {ex}")
-
+    
     summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
     return format_query_response(donors, genomic_query, summary_stats, page, page_size)
 
@@ -478,7 +481,7 @@ def discovery():
 @app.route('/discovery/query')
 def discovery_query(
     treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38",
-    exclude_programs=[], genomicDataTypes=[]
+    exclude_programs=[], genomic_data_types=[]
 ):
     is_allowed, status_code = is_discovery_allowed()
     if status_code != 200:
@@ -503,8 +506,8 @@ def discovery_query(
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
     donors = safe_get_response_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
 
-    if gene or chrom or genomicDataTypes:
-        mapped_types = get_mapped_genomic_types(genomicDataTypes)
+    if gene or chrom or genomic_data_types:
+        mapped_types = get_mapped_genomic_types(genomic_data_types)
 
         # build sample ↔ donor mapping
         samplereg_mapping = {}

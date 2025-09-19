@@ -206,7 +206,7 @@ components:
                 $ref: '#/components/schemas/Fields'
         genomicDataTypesParam:
             in: query
-            name: genomicDataTypes
+            name: genomic_data_types
             style: pipeDelimited
             description: A list of genomic data types to include in the query
             example: genomes|variants
