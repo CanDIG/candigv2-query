@@ -246,11 +246,16 @@ def query(
     # NB: We're still doing table joins here, which is probably not where we want to do them
     # We're grabbing (and storing in memory) all the donor data in Katsu with the below request
     # Query the appropriate Katsu endpoint
+
+    # Note: We get three extra things from /authorized/query that aren't part of the Donors object:
+    # 1) submitter_sample_ids
+    # 2) primary_site
+    # 3) treatment_type
+    # These are used to build the summary information without needing to re-query Katsu
+    # For the purposes of the return value, let's remove all three of these into their own variables
     headers = get_headers()
     url = f"{config.KATSU_URL}/v3/authorized/query/"
-
-    logger.warning(f"Query parameters: treatment={treatment}, primary_site={primary_site}, drug_name={drug_name}, systemic_therapy_type={systemic_therapy_type}, chrom={chrom}, gene={gene}, page={page}, page_size={page_size}, assembly={assembly}, exclude_programs={exclude_programs}, genomic_data_types={genomic_data_types}, session_id={session_id}")
-    
+ 
     # Map clinical filters
     param_mapping = [
         (treatment, "treatment_type"),
@@ -275,17 +280,6 @@ def query(
             logger.error(err_msg)
             # Do not forward the response from Katsu in case of compromising information (due to X-Service-Token)
             raise Exception(err_msg)
-            donors = donors_req.json()['items']
-
-            # Filter on excluded programs
-            donors = [donor for donor in donors if donor['program_id'] not in exclude_programs]
-
-            # Note: We get three extra things from /authorized/query that aren't part of the Donors object:
-            # 1) submitter_sample_ids
-            # 2) primary_site
-            # 3) treatment_type
-            # These are used to build the summary information without needing to re-query Katsu
-            # For the purposes of the return value, let's remove all three of these into their own variables
 
     donors = [d for d in donors_req.json()['items'] if d['program_id'] not in exclude_programs]
 
@@ -294,7 +288,6 @@ def query(
     for header in ['submitter_sample_ids', 'primary_site', 'treatment_type']:
         summary_info[header] = {donor['submitter_donor_id']: donor[header] for donor in donors}
         for donor in donors:
-            summary_info[header][donor['submitter_donor_id']] = donor[header]
             del donor[header]
 
     # Prepare genomic data
