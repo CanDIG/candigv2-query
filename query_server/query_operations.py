@@ -274,7 +274,7 @@ def query(
     if not donors_req.ok:
         if donors_req.status_code == 401:
             # 401 Unauthorized: The token is invalid
-            return format_query_response([], [], get_summary_stats([], {}, {}), page, page_size), 401
+            return format_query_response([], [], get_summary_stats([], {}, {}), page, page_size)[0], 401
         else:
             err_msg = f"Could not got Katsu donors response: {donors_req.status_code} {donors_req.text}"
             logger.error(err_msg)
