@@ -227,46 +227,25 @@ def format_query_response(donors, genomic_query, summary_stats, page, page_size)
     # and then paginate the list of donors, calling donors_with_clinical_data on each before returning
     return fix_dicts(full_data), 200
 
-@app.route('/query')
-def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="", chrom="", gene="", page=0, page_size=10, assembly="hg38", exclude_programs=[], session_id=""):
-    headers = get_headers()
+GENOMIC_TYPE_MAP = {
+    "Variants": "variants",
+    "Transcriptomes (WTS)": "transcriptomes",
+    "Reads (WGS)": "reads",
+    "Genomes": "genomes"
+}
 
+def get_mapped_genomic_types(genomic_data_types):
+    return [GENOMIC_TYPE_MAP.get(dtype) for dtype in genomic_data_types if GENOMIC_TYPE_MAP.get(dtype)]
+    
+@app.route('/query')
+def query(
+    treatment="", primary_site="", drug_name="", systemic_therapy_type="",
+    chrom="", gene="", page=0, page_size=10, assembly="hg38",
+    exclude_programs=[], genomic_data_types=[], session_id=""
+):
     # NB: We're still doing table joins here, which is probably not where we want to do them
     # We're grabbing (and storing in memory) all the donor data in Katsu with the below request
-
     # Query the appropriate Katsu endpoint
-    url = f"{config.KATSU_URL}/v3/authorized/query/"
-
-    param_mapping = [
-        (treatment, "treatment_type"),
-        (primary_site, "primary_site"),
-        (drug_name, "systemic_therapy_drug_name"),
-        (systemic_therapy_type, "systemic_therapy_type"),
-        (exclude_programs, "exclude_programs")
-    ]
-    params = {
-        'page_size': PAGE_SIZE
-    }
-    for param in param_mapping:
-        if param[0] == "" or param[0] == []:
-            continue
-        params[param[1]] = param[0]
-
-    full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
-    donors_req = requests.get(full_url, headers=headers)
-    if not donors_req.ok:
-        if donors_req.status_code == 401:
-            # 401 Unauthorized: the user is not allowed to view any donors at this site
-            # The rest of the code should just pass quietly
-            return format_query_response([], [], get_summary_stats([], {}, {}), page, page_size)
-        else:
-            err_msg = f"Could not got Katsu donors response: {donors_req.status_code} {donors_req.text}"
-            logger.error(err_msg)
-            raise Exception(err_msg)
-    donors = donors_req.json()['items']
-
-    # Filter on excluded programs
-    donors = [donor for donor in donors if donor['program_id'] not in exclude_programs]
 
     # Note: We get three extra things from /authorized/query that aren't part of the Donors object:
     # 1) submitter_sample_ids
@@ -274,28 +253,59 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
     # 3) treatment_type
     # These are used to build the summary information without needing to re-query Katsu
     # For the purposes of the return value, let's remove all three of these into their own variables
+    headers = get_headers()
+    url = f"{config.KATSU_URL}/v3/authorized/query/"
+ 
+    # Map clinical filters
+    param_mapping = [
+        (treatment, "treatment_type"),
+        (primary_site, "primary_site"),
+        (drug_name, "systemic_therapy_drug_name"),
+        (systemic_therapy_type, "systemic_therapy_type"),
+        (exclude_programs, "exclude_programs")
+    ]
+    params = {'page_size': PAGE_SIZE}
+    for val, key in param_mapping:
+        if val not in ("", []):
+            params[key] = val
+
+    full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
+    donors_req = requests.get(full_url, headers=headers)
+    if not donors_req.ok:
+        if donors_req.status_code == 401:
+            # 401 Unauthorized: The token is invalid
+            return format_query_response([], [], get_summary_stats([], {}, {}), page, page_size)[0], 401
+        else:
+            err_msg = f"Could not got Katsu donors response: {donors_req.status_code} {donors_req.text}"
+            logger.error(err_msg)
+            # Do not forward the response from Katsu in case of compromising information (due to X-Service-Token)
+            raise Exception(err_msg)
+
+    donors = [d for d in donors_req.json()['items'] if d['program_id'] not in exclude_programs]
+
+    # Extract summary info
     summary_info = {}
-    summary_headers = ['submitter_sample_ids', 'primary_site', 'treatment_type']
-    for header in summary_headers:
-        summary_info[header] = {}
+    for header in ['submitter_sample_ids', 'primary_site', 'treatment_type']:
+        summary_info[header] = {donor['submitter_donor_id']: donor[header] for donor in donors}
         for donor in donors:
-            summary_info[header][donor['submitter_donor_id']] = donor[header]
             del donor[header]
 
-    # Now we combine this with HTSGet, if any
+    # Prepare genomic data
     genomic_query = []
-    # genomic_query_info = None
-    if gene != "" or chrom != "":
+    # Cross reference with HTSGet if gene or chrom is specified
+    if gene != "" or chrom != "" :
+        mapped_types = get_mapped_genomic_types(genomic_data_types)
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
-
             # We need to be able to map sample registrations, so we'll grab it from Katsu
-            samplereg_query_req = requests.get(f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000", headers=headers)
-            samplereg_query = safe_get_response_json(samplereg_query_req, 'Katsu sample registrations')
-            samplereg_mapping = {}
-            for samplereg in samplereg_query['items']:
-                samplereg_mapping[samplereg['submitter_sample_id']] = (samplereg['submitter_donor_id'], samplereg['tumour_normal_designation'])
-
+            samplereg_req = requests.get(
+                f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000",
+                headers=headers
+            )
+            samplereg = safe_get_response_json(samplereg_req, 'Katsu sample registrations')
+            samplereg_mapping = {s['submitter_sample_id']: (s['submitter_donor_id'], s['tumour_normal_designation'])
+                                for s in samplereg['items']}
+            
             # genomic_query_info contains ALL matches from every dataset
             # This is meant to be used to fill out the summary stats ONLY
             # However, that part isn't covered in this PR (it's in DIG-1372 (https://candig.atlassian.net/browse/DIG-1372))
@@ -305,46 +315,138 @@ def query(treatment="", primary_site="", drug_name="", systemic_therapy_type="",
             #    sample_ids = genomic_query_info[program]
 
             htsget_found_donors = {}
-            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else {}
             caseLevelData = []
-            for program in response.keys():
-                if type(response[program]) is not list:
+
+            # TODO: Cache the above list of donor IDs and summary statistics
+            summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type']) 
+
+            for program, results in htsget.get('estimatedResults', {}).items():
+                if not isinstance(results, list):
                     continue
-                for item in response[program]:
-                    submitter_sample_id = item["submitter_sample_id"]
+                for item in results:
+                    sample_id = item["submitter_sample_id"]
                     case_data = {
                         "program_id": program,
-                        "submitter_sample_id": submitter_sample_id,
-                        "variant_count": item["variant_count"]
+                        "submitter_sample_id": sample_id,
+                        "variant_count": item.get("variant_count", 0)
                     }
-                    if submitter_sample_id in samplereg_mapping:
-                        case_data['donor_id'] = samplereg_mapping[submitter_sample_id][0]
-                        case_data['tumour_normal_designation'] = samplereg_mapping[submitter_sample_id][1]
+
+                    if sample_id in samplereg_mapping:
+                        case_data['donor_id'], case_data['tumour_normal_designation'] = samplereg_mapping[sample_id]
                     else:
                         logger.error(f"Could not find donor mapping for {case_data}")
-                        case_data['donor_id'] = submitter_sample_id
+                        case_data['donor_id'] = sample_id
                         case_data['tumour_normal_designation'] = 'Tumour'
+
+                    try:
+                        # Use /objects -> /experiments/{id} endpoints
+                        objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects?submitter_sample_id={sample_id}", headers=headers)
+                        if not objects_resp.ok or not objects_resp.json():
+                            continue
+
+                        experiment_id = objects_resp.json()[0].get("id")
+                        if not experiment_id:
+                            continue
+
+                        sample_resp = requests.get(f"{config.HTSGET_URL}/htsget/v1/experiments/{experiment_id}", headers=headers)
+                        if sample_resp.ok:
+                            sample_info = sample_resp.json()
+                            case_data['genomes'] = sample_info.get('genomes', [])
+                            case_data['transcriptomes'] = sample_info.get('transcriptomes', [])
+                            case_data['variants'] = sample_info.get('variants', [])
+                            case_data['reads'] = sample_info.get('reads', [])
+
+                            logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
+                            logger.warning(f"Requested data types: {mapped_types}")
+                            logger.warning(f"Sample info: {sample_info}")
+                            # OR filter: only include if any requested type exists
+                            if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
+                                continue
+                        else:
+                            continue
+                    except Exception as e:
+                        logger.warning(f"Error fetching genomic info for {sample_id}: {e}")
+                        continue
+
                     htsget_found_donors[case_data['donor_id']] = 1
                     caseLevelData.append(case_data)
 
             # Filter clinical results based on genomic results
-            donors = [donor for donor in donors if donor['submitter_donor_id'] in htsget_found_donors]
-            katsu_allowed_donors = {}
-            for donor in donors:
-                katsu_allowed_donors[f"{donor['program_id']}~{donor['submitter_donor_id']}"] = 1
-            for case_data in caseLevelData:
-                if ('donor_id' in case_data and 'program_id' in case_data and
-                    f"{case_data['program_id']}~{case_data['donor_id']}" in katsu_allowed_donors):
-                    genomic_query.append(case_data)
+            donors = [d for d in donors if d['submitter_donor_id'] in htsget_found_donors]
+            allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in donors}
+            genomic_query = [c for c in caseLevelData if f"{c['program_id']}~{c['donor_id']}" in allowed_keys]
 
         except Exception as ex:
             logger.error(f"Error while reading HTSGet response: {ex}")
+    elif genomic_data_types:
+        # Genomic data types requested but no gene/chrom specified
+        mapped_types = get_mapped_genomic_types(genomic_data_types)
+        htsget_found_donors = {}
+        caseLevelData = []
 
-    # TODO: Cache the above list of donor IDs and summary statistics
+        try:
+            # Get sample registration info
+            samplereg_req = requests.get(
+                f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000",
+                headers=headers
+            )
+            samplereg = safe_get_response_json(samplereg_req, 'Katsu sample registrations')
+            samplereg_mapping = {
+                s['submitter_sample_id']: (s['submitter_donor_id'], s['tumour_normal_designation'])
+                for s in samplereg['items']
+            }
+
+            # Get all DRS objects (each representing a sample or experiment)
+            objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects", headers=headers)
+            if not objects_resp.ok:
+                raise Exception(f"Could not fetch DRS objects: {objects_resp.status_code} {objects_resp.text}")
+
+            objects = objects_resp.json()
+            for obj in objects:
+                experiment_id = obj.get("id")
+                if not experiment_id:
+                    continue
+
+                # Fetch experiment details
+                sample_resp = requests.get(f"{config.HTSGET_URL}/htsget/v1/experiments/{experiment_id}", headers=headers)
+                if not sample_resp.ok:
+                    continue
+
+                sample_info = sample_resp.json()
+                sample_id = sample_info.get("submitter_sample_id") or obj.get("name")
+
+                case_data = {
+                    "program_id": obj.get("program", "unknown"),
+                    "submitter_sample_id": sample_id,
+                    "variant_count": sample_info.get("variant_count", 0),
+                    "genomes": sample_info.get("genomes", []),
+                    "transcriptomes": sample_info.get("transcriptomes", []),
+                    "variants": sample_info.get("variants", []),
+                    "reads": sample_info.get("reads", []),
+                }
+
+                if sample_id in samplereg_mapping:
+                    case_data['donor_id'], case_data['tumour_normal_designation'] = samplereg_mapping[sample_id]
+                else:
+                    case_data['donor_id'] = sample_id
+                    case_data['tumour_normal_designation'] = 'Tumour'
+
+                # Filter by mapped genomic data types (e.g., "variants")
+                if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
+                    continue
+
+                htsget_found_donors[case_data['donor_id']] = 1
+                caseLevelData.append(case_data)
+
+            # AND filter with clinical donors
+            donors = [d for d in donors if d['submitter_donor_id'] in htsget_found_donors]
+            allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in donors}
+            genomic_query = [c for c in caseLevelData if f"{c['program_id']}~{c['donor_id']}" in allowed_keys]
+        except Exception as e:
+            logger.error(f"Error while fetching genomic data types: {e}")
+
     summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
-
     return format_query_response(donors, genomic_query, summary_stats, page, page_size)
-
 
 def is_discovery_allowed():
     if "X-Service-Token" in connexion.request.headers:
@@ -367,12 +469,12 @@ def genomic_completeness():
 
     headers = get_headers()
 
-    programs = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs",
+    programs = safe_get_response_json(requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/programs",
             # Reuse their bearer token
             headers=headers), 'HTSGet programs')
     retVal = {}
     for program_id in programs:
-        program = safe_get_response_json(requests.get(f"{config.HTSGET_URL}/ga4gh/drs/v1/programs/{program_id}",
+        program = safe_get_response_json(requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/programs/{program_id}",
         # Reuse their bearer token
         headers=headers), 'HTSGet program statistics')
         if program_id not in retVal:
@@ -468,65 +570,131 @@ def discovery():
     return {"error": "Invalid target service"}, 400
 
 @app.route('/discovery/query')
-def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38", exclude_programs=[]):
+def discovery_query(
+    treatment="", primary_site="", drug_name="", chrom="", gene="", assembly="hg38",
+    exclude_programs=[], genomic_data_types=[]
+):
     is_allowed, status_code = is_discovery_allowed()
     if status_code != 200:
         return is_allowed, status_code
 
     url = f"{config.KATSU_URL}/v3/explorer/donors/"
     headers = get_headers()
+    headers.pop("Authorization", None)
 
+    # clinical params
     param_mapping = [
         (treatment, "treatment_type"),
         (primary_site, "primary_site"),
         (drug_name, "systemic_therapy_drug_name"),
         (exclude_programs, "exclude_programs")
     ]
-    params = {
-        "page_size": PAGE_SIZE
-    }
+    params = {"page_size": PAGE_SIZE}
     for param in param_mapping:
-        if param[0] == "" or param[0] == []:
-            continue
-        params[param[1]] = param[0]
+        if param[0] not in ("", []):
+            params[param[1]] = param[0]
 
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
     donors = safe_get_response_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
 
-    # Cross reference with HTSGet, if necessary
-    if gene != "" or chrom != "":
-        # First, we need to map all Katsu-identified specimens
+    if gene!="" or chrom!="":
+        mapped_types = get_mapped_genomic_types(genomic_data_types)
+
+        # build sample ↔ donor mapping
         samplereg_mapping = {}
         for donor in donors:
-            if 'submitter_sample_ids' in donor and type(donor['submitter_sample_ids']) is list:
-                for sample_id in donor['submitter_sample_ids']:
+            if isinstance(donor.get("submitter_sample_ids"), list):
+                for sample_id in donor["submitter_sample_ids"]:
                     samplereg_mapping[sample_id] = donor
 
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
-
             htsget_found_donors = {}
-            response = htsget['estimatedResults'] if 'estimatedResults' in htsget else {}
-            for program in response.keys():
-                if type(response[program]) is not list:
+
+            for program, results in htsget.get("estimatedResults", {}).items():
+                if not isinstance(results, list):
                     continue
-                for item in response[program]:
+                for item in results:
                     submitter_sample_id = item["submitter_sample_id"]
+
+                    # Use /objects -> /experiments/{id} endpoints
+                    try:
+                        objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects?submitter_sample_id={submitter_sample_id}", headers=headers)
+                        if not objects_resp.ok or not objects_resp.json():
+                            continue
+
+                        experiment_id = objects_resp.json()[0].get("id")
+                        if not experiment_id:
+                            continue
+
+                        sample_resp = requests.get(f"{config.HTSGET_URL}/htsget/v1/experiments/{experiment_id}", headers=headers)
+                        if sample_resp.ok:
+                            sample_info = sample_resp.json()
+                            # Skip donor if none of requested genomic types exist
+                            if mapped_types and not any(sample_info.get(dtype) for dtype in mapped_types):
+                                continue
+                        else:
+                            continue
+                    except Exception as e:
+                        logger.warning(f"Error fetching experiment info for {submitter_sample_id}: {e}")
+                        continue
+
                     if submitter_sample_id in samplereg_mapping:
-                        donor_id = samplereg_mapping[submitter_sample_id][0]
-                        htsget_found_donors[donor_id] = 1
-                    else:
-                        logger.error(f"Could not find donor mapping for {item}")
-                        donor_id = submitter_sample_id
-                        htsget_found_donors[donor_id] = 1
-            # Filter clinical results based on genomic results
-            donors = [donor for donor in donors if f"{donor['program_id']}~{donor['submitter_donor_id']}" in htsget_found_donors]
+                        donor = samplereg_mapping[submitter_sample_id]
+                        donor_key = f"{donor['program_id']}~{donor['submitter_donor_id']}"
+                        htsget_found_donors[donor_key] = 1
+
+            donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
 
         except Exception as ex:
-            logger.error(f"Error while querying HTSGet: {ex}")
+            logger.error(f"Error while querying HTSGet in discovery_query: {ex}")
+    elif genomic_data_types:
+        # Genomic data types requested but no gene/chrom specified
+        mapped_types = get_mapped_genomic_types(genomic_data_types)
 
-    # Assemble summary statistics
-    # NB: Do we need this split up into site-vs-program as well?
+        # build sample ↔ donor mapping
+        samplereg_mapping = {}
+        for donor in donors:
+            if isinstance(donor.get("submitter_sample_ids"), list):
+                for sample_id in donor["submitter_sample_ids"]:
+                    samplereg_mapping[sample_id] = donor
+
+        htsget_found_donors = {}
+        try:
+            # Get all DRS objects (each representing a sample or experiment)
+            objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects", headers=headers)
+            if not objects_resp.ok:
+                raise Exception(f"Could not fetch DRS objects: {objects_resp.status_code} {objects_resp.text}")
+
+            objects = objects_resp.json()
+            for obj in objects:
+                experiment_id = obj.get("id")
+                if not experiment_id:
+                    continue
+
+                # Fetch experiment details
+                sample_resp = requests.get(f"{config.HTSGET_URL}/htsget/v1/experiments/{experiment_id}", headers=headers)
+                if not sample_resp.ok:
+                    continue
+
+                sample_info = sample_resp.json()
+                sample_id = sample_info.get("submitter_sample_id") or obj.get("name")
+
+                # Skip donor if none of requested genomic types exist
+                if mapped_types and not any(sample_info.get(dtype) for dtype in mapped_types):
+                    continue
+
+                if sample_id in samplereg_mapping:
+                    donor = samplereg_mapping[sample_id]
+                    donor_key = f"{donor['program_id']}~{donor['submitter_donor_id']}"
+                    htsget_found_donors[donor_key] = 1
+
+            donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
+
+        except Exception as e:
+            logger.error(f"Error while querying HTSGet genomic data types in discovery_query: {e}")
+
+    # build summary stats (like before)
     summary_stats = {
         'age_at_diagnosis': {},
         'treatment_type_count': {},
@@ -541,16 +709,14 @@ def discovery_query(treatment="", primary_site="", drug_name="", chrom="", gene=
     ]
     for donor in donors:
         for mapping in summary_stat_mapping:
-            if type(donor[mapping[1]]) is list:
-                for item in donor[mapping[1]]:
+            val = donor.get(mapping[1])
+            if isinstance(val, list):
+                for item in val:
                     add_or_increment(summary_stats[mapping[0]], item)
             else:
-                add_or_increment(summary_stats[mapping[0]], donor[mapping[1]])
+                add_or_increment(summary_stats[mapping[0]], val)
 
-    # Censor if necessary
-    summary_stats = censor_response(summary_stats)
-
-    return fix_dicts(summary_stats), 200
+    return fix_dicts(censor_response(summary_stats)), 200
 
 @app.route('/whoami')
 def whoami():
