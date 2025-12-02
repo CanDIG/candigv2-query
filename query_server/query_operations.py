@@ -236,7 +236,7 @@ GENOMIC_TYPE_MAP = {
 
 def get_mapped_genomic_types(genomic_data_types):
     return [GENOMIC_TYPE_MAP.get(dtype) for dtype in genomic_data_types if GENOMIC_TYPE_MAP.get(dtype)]
-    
+
 @app.route('/query')
 def query(
     treatment="", primary_site="", drug_name="", systemic_therapy_type="",
@@ -255,7 +255,7 @@ def query(
     # For the purposes of the return value, let's remove all three of these into their own variables
     headers = get_headers()
     url = f"{config.KATSU_URL}/v3/authorized/query/"
- 
+
     # Map clinical filters
     param_mapping = [
         (treatment, "treatment_type"),
@@ -305,7 +305,7 @@ def query(
             samplereg = safe_get_response_json(samplereg_req, 'Katsu sample registrations')
             samplereg_mapping = {s['submitter_sample_id']: (s['submitter_donor_id'], s['tumour_normal_designation'])
                                 for s in samplereg['items']}
-            
+
             # genomic_query_info contains ALL matches from every dataset
             # This is meant to be used to fill out the summary stats ONLY
             # However, that part isn't covered in this PR (it's in DIG-1372 (https://candig.atlassian.net/browse/DIG-1372))
@@ -318,7 +318,7 @@ def query(
             caseLevelData = []
 
             # TODO: Cache the above list of donor IDs and summary statistics
-            summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type']) 
+            summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
 
             for program, results in htsget.get('estimatedResults', {}).items():
                 if not isinstance(results, list):
