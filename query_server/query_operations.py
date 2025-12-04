@@ -565,6 +565,16 @@ def discovery_query(
         if isinstance(donor.get("submitter_sample_ids"), list):
             for sample_id in donor["submitter_sample_ids"]:
                 samplereg_mapping[sample_id] = donor
+
+    # Get all DRS objects representing a sample or experiment
+    experiments_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/experiments", headers=headers, json={})
+    if not experiments_resp.ok:
+        raise Exception(f"Could not fetch DRS objects: {experiments_resp.status_code} {experiments_resp.text}")
+
+    experiments = {}
+    for experiment in experiments_resp.json():
+        experiments[experiment["experiment_id"]] = experiment
+
     try:
         if gene!="" or chrom!="":
             htsget = query_htsget(headers, gene, assembly, chrom)
@@ -574,27 +584,12 @@ def discovery_query(
                     continue
                 for item in results:
                     submitter_sample_id = item["submitter_sample_id"]
-
-                    # Use /objects -> /experiments/{id} endpoints
-                    try:
-                        objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects?submitter_sample_id={submitter_sample_id}", headers=headers)
-                        if not objects_resp.ok or not objects_resp.json():
+                    if submitter_sample_id in experiments:
+                        sample_info = experiments[submitter_sample_id]
+                        # Skip donor if none of requested genomic types exist
+                        if mapped_types and not any(sample_info.get(dtype) for dtype in mapped_types):
                             continue
-
-                        experiment_id = objects_resp.json()[0].get("id")
-                        if not experiment_id:
-                            continue
-
-                        sample_resp = requests.get(f"{config.HTSGET_URL}/htsget/v1/experiments/{experiment_id}", headers=headers)
-                        if sample_resp.ok:
-                            sample_info = sample_resp.json()
-                            # Skip donor if none of requested genomic types exist
-                            if mapped_types and not any(sample_info.get(dtype) for dtype in mapped_types):
-                                continue
-                        else:
-                            continue
-                    except Exception as e:
-                        logger.warning(f"Error fetching experiment info for {submitter_sample_id}: {e}")
+                    else:
                         continue
 
                     if submitter_sample_id in samplereg_mapping:
@@ -603,24 +598,8 @@ def discovery_query(
                         htsget_found_donors[donor_key] = 1
         elif genomic_data_types:
             # Genomic data types requested but no gene/chrom specified
-            # Get all DRS objects (each representing a sample or experiment)
-            objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects", headers=headers)
-            if not objects_resp.ok:
-                raise Exception(f"Could not fetch DRS objects: {objects_resp.status_code} {objects_resp.text}")
-
-            objects = objects_resp.json()
-            for obj in objects:
-                experiment_id = obj.get("id")
-                if not experiment_id:
-                    continue
-
-                # Fetch experiment details
-                sample_resp = requests.get(f"{config.HTSGET_URL}/htsget/v1/experiments/{experiment_id}", headers=headers)
-                if not sample_resp.ok:
-                    continue
-
-                sample_info = sample_resp.json()
-                sample_id = sample_info.get("submitter_sample_id") or obj.get("name")
+            for sample_id in experiments:
+                sample_info = experiments[sample_id]
 
                 # Skip donor if none of requested genomic types exist
                 if mapped_types and not any(sample_info.get(dtype) for dtype in mapped_types):
@@ -632,7 +611,9 @@ def discovery_query(
                     htsget_found_donors[donor_key] = 1
     except Exception as e:
         logger.error(f"Error while querying HTSGet in discovery_query: {e}")
-    donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
+
+    if len(htsget_found_donors) > 0:
+        donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
 
     # build summary stats (like before)
     summary_stats = {
