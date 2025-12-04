@@ -313,14 +313,14 @@ def query(
     # Prepare genomic data
     genomic_query = []
     mapped_types = get_mapped_genomic_types(genomic_data_types)
-    htsget_found_donors = {}
+    htsget_found_donors = None
     caseLevelData = []
 
     # Cross reference with HTSGet if gene or chrom is specified
     if gene != "" or chrom != "" :
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
-
+            htsget_found_donors = {}
             # genomic_query_info contains ALL matches from every dataset
             # This is meant to be used to fill out the summary stats ONLY
             # However, that part isn't covered in this PR (it's in DIG-1372 (https://candig.atlassian.net/browse/DIG-1372))
@@ -370,6 +370,8 @@ def query(
             logger.error(f"Error while reading HTSGet response: {ex}")
     elif genomic_data_types:
         # Genomic data types requested but no gene/chrom specified
+        htsget_found_donors = {}
+
         try:
             for sample_id in experiments:
                 sample_info = experiments[sample_id]
@@ -400,7 +402,7 @@ def query(
             logger.error(f"Error while fetching genomic data types: {e}")
 
     # AND filter with clinical donors
-    if len(htsget_found_donors) > 0:
+    if htsget_found_donors is not None:
         donors = [d for d in donors if d['submitter_donor_id'] in htsget_found_donors]
         allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in donors}
         genomic_query = [c for c in caseLevelData if f"{c['program_id']}~{c['donor_id']}" in allowed_keys]
@@ -557,7 +559,7 @@ def discovery_query(
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
     donors = safe_get_response_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
     mapped_types = get_mapped_genomic_types(genomic_data_types)
-    htsget_found_donors = {}
+    htsget_found_donors = None
 
     # build sample ↔ donor mapping
     samplereg_mapping = {}
@@ -578,6 +580,7 @@ def discovery_query(
     try:
         if gene!="" or chrom!="":
             htsget = query_htsget(headers, gene, assembly, chrom)
+            htsget_found_donors = {}
 
             for program, results in htsget.get("estimatedResults", {}).items():
                 if not isinstance(results, list):
@@ -598,6 +601,7 @@ def discovery_query(
                         htsget_found_donors[donor_key] = 1
         elif genomic_data_types:
             # Genomic data types requested but no gene/chrom specified
+            htsget_found_donors = {}
             for sample_id in experiments:
                 sample_info = experiments[sample_id]
 
@@ -612,7 +616,7 @@ def discovery_query(
     except Exception as e:
         logger.error(f"Error while querying HTSGet in discovery_query: {e}")
 
-    if len(htsget_found_donors) > 0:
+    if htsget_found_donors is not None:
         donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
 
     # build summary stats (like before)
