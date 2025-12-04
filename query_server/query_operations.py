@@ -556,20 +556,18 @@ def discovery_query(
 
     full_url = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
     donors = safe_get_response_json(requests.get(full_url, headers=headers), 'Katsu explorer donors')
+    mapped_types = get_mapped_genomic_types(genomic_data_types)
+    htsget_found_donors = {}
 
-    if gene!="" or chrom!="":
-        mapped_types = get_mapped_genomic_types(genomic_data_types)
-
-        # build sample ↔ donor mapping
-        samplereg_mapping = {}
-        for donor in donors:
-            if isinstance(donor.get("submitter_sample_ids"), list):
-                for sample_id in donor["submitter_sample_ids"]:
-                    samplereg_mapping[sample_id] = donor
-
-        try:
+    # build sample ↔ donor mapping
+    samplereg_mapping = {}
+    for donor in donors:
+        if isinstance(donor.get("submitter_sample_ids"), list):
+            for sample_id in donor["submitter_sample_ids"]:
+                samplereg_mapping[sample_id] = donor
+    try:
+        if gene!="" or chrom!="":
             htsget = query_htsget(headers, gene, assembly, chrom)
-            htsget_found_donors = {}
 
             for program, results in htsget.get("estimatedResults", {}).items():
                 if not isinstance(results, list):
@@ -603,24 +601,8 @@ def discovery_query(
                         donor = samplereg_mapping[submitter_sample_id]
                         donor_key = f"{donor['program_id']}~{donor['submitter_donor_id']}"
                         htsget_found_donors[donor_key] = 1
-
-            donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
-
-        except Exception as ex:
-            logger.error(f"Error while querying HTSGet in discovery_query: {ex}")
-    elif genomic_data_types:
-        # Genomic data types requested but no gene/chrom specified
-        mapped_types = get_mapped_genomic_types(genomic_data_types)
-
-        # build sample ↔ donor mapping
-        samplereg_mapping = {}
-        for donor in donors:
-            if isinstance(donor.get("submitter_sample_ids"), list):
-                for sample_id in donor["submitter_sample_ids"]:
-                    samplereg_mapping[sample_id] = donor
-
-        htsget_found_donors = {}
-        try:
+        elif genomic_data_types:
+            # Genomic data types requested but no gene/chrom specified
             # Get all DRS objects (each representing a sample or experiment)
             objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects", headers=headers)
             if not objects_resp.ok:
@@ -648,11 +630,9 @@ def discovery_query(
                     donor = samplereg_mapping[sample_id]
                     donor_key = f"{donor['program_id']}~{donor['submitter_donor_id']}"
                     htsget_found_donors[donor_key] = 1
-
-            donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
-
-        except Exception as e:
-            logger.error(f"Error while querying HTSGet genomic data types in discovery_query: {e}")
+    except Exception as e:
+        logger.error(f"Error while querying HTSGet in discovery_query: {e}")
+    donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
 
     # build summary stats (like before)
     summary_stats = {
