@@ -298,6 +298,17 @@ def query(
     samplereg = safe_get_response_json(samplereg_req, 'Katsu sample registrations')
     samplereg_mapping = {s['submitter_sample_id']: (s['submitter_donor_id'], s['tumour_normal_designation'])
                         for s in samplereg['items']}
+    # collect submitter_sample_ids we need:
+    submitter_sample_ids = list(samplereg_mapping.keys())
+
+    # Get all DRS objects representing a sample or experiment
+    experiments_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/experiments", headers=headers, json={"submitter_sample_ids": submitter_sample_ids})
+    if not experiments_resp.ok:
+        raise Exception(f"Could not fetch DRS objects: {experiments_resp.status_code} {experiments_resp.text}")
+
+    experiments = {}
+    for experiment in experiments_resp.json():
+        experiments[experiment["experiment_id"]] = experiment
 
     # Prepare genomic data
     genomic_query = []
@@ -337,30 +348,17 @@ def query(
                         case_data['tumour_normal_designation'] = 'Tumour'
 
                     try:
-                        # Use /objects -> /experiments/{id} endpoints
-                        objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects?submitter_sample_id={sample_id}", headers=headers)
-                        if not objects_resp.ok or not objects_resp.json():
-                            continue
+                        sample_info = experiments[sample_id]
+                        case_data['genomes'] = sample_info.get('genomes', [])
+                        case_data['transcriptomes'] = sample_info.get('transcriptomes', [])
+                        case_data['variants'] = sample_info.get('variants', [])
+                        case_data['reads'] = sample_info.get('reads', [])
 
-                        experiment_id = objects_resp.json()[0].get("id")
-                        if not experiment_id:
-                            continue
-
-                        sample_resp = requests.get(f"{config.HTSGET_URL}/htsget/v1/experiments/{experiment_id}", headers=headers)
-                        if sample_resp.ok:
-                            sample_info = sample_resp.json()
-                            case_data['genomes'] = sample_info.get('genomes', [])
-                            case_data['transcriptomes'] = sample_info.get('transcriptomes', [])
-                            case_data['variants'] = sample_info.get('variants', [])
-                            case_data['reads'] = sample_info.get('reads', [])
-
-                            logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
-                            logger.warning(f"Requested data types: {mapped_types}")
-                            logger.warning(f"Sample info: {sample_info}")
-                            # OR filter: only include if any requested type exists
-                            if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
-                                continue
-                        else:
+                        logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
+                        logger.warning(f"Requested data types: {mapped_types}")
+                        logger.warning(f"Sample info: {sample_info}")
+                        # OR filter: only include if any requested type exists
+                        if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
                             continue
                     except Exception as e:
                         logger.warning(f"Error fetching genomic info for {sample_id}: {e}")
@@ -373,27 +371,10 @@ def query(
     elif genomic_data_types:
         # Genomic data types requested but no gene/chrom specified
         try:
-            # Get all DRS objects (each representing a sample or experiment)
-            objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects", headers=headers)
-            if not objects_resp.ok:
-                raise Exception(f"Could not fetch DRS objects: {objects_resp.status_code} {objects_resp.text}")
-
-            objects = objects_resp.json()
-            for obj in objects:
-                experiment_id = obj.get("id")
-                if not experiment_id:
-                    continue
-
-                # Fetch experiment details
-                sample_resp = requests.get(f"{config.HTSGET_URL}/htsget/v1/experiments/{experiment_id}", headers=headers)
-                if not sample_resp.ok:
-                    continue
-
-                sample_info = sample_resp.json()
-                sample_id = sample_info.get("submitter_sample_id") or obj.get("name")
-
+            for sample_id in experiments:
+                sample_info = experiments[sample_id]
                 case_data = {
-                    "program_id": obj.get("program", "unknown"),
+                    "program_id": sample_info.get("program", "unknown"),
                     "submitter_sample_id": sample_id,
                     "variant_count": sample_info.get("variant_count", 0),
                     "genomes": sample_info.get("genomes", []),
