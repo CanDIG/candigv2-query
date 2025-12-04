@@ -290,21 +290,25 @@ def query(
         for donor in donors:
             del donor[header]
 
+    # We need to be able to map sample registrations, so we'll grab it from Katsu
+    samplereg_req = requests.get(
+        f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000",
+        headers=headers
+    )
+    samplereg = safe_get_response_json(samplereg_req, 'Katsu sample registrations')
+    samplereg_mapping = {s['submitter_sample_id']: (s['submitter_donor_id'], s['tumour_normal_designation'])
+                        for s in samplereg['items']}
+
     # Prepare genomic data
     genomic_query = []
+    mapped_types = get_mapped_genomic_types(genomic_data_types)
+    htsget_found_donors = {}
+    caseLevelData = []
+
     # Cross reference with HTSGet if gene or chrom is specified
     if gene != "" or chrom != "" :
-        mapped_types = get_mapped_genomic_types(genomic_data_types)
         try:
             htsget = query_htsget(headers, gene, assembly, chrom)
-            # We need to be able to map sample registrations, so we'll grab it from Katsu
-            samplereg_req = requests.get(
-                f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000",
-                headers=headers
-            )
-            samplereg = safe_get_response_json(samplereg_req, 'Katsu sample registrations')
-            samplereg_mapping = {s['submitter_sample_id']: (s['submitter_donor_id'], s['tumour_normal_designation'])
-                                for s in samplereg['items']}
 
             # genomic_query_info contains ALL matches from every dataset
             # This is meant to be used to fill out the summary stats ONLY
@@ -313,12 +317,6 @@ def query(
             # genomic_query_info = htsget['query_info']
             # for program in genomic_query_info:
             #    sample_ids = genomic_query_info[program]
-
-            htsget_found_donors = {}
-            caseLevelData = []
-
-            # TODO: Cache the above list of donor IDs and summary statistics
-            summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
 
             for program, results in htsget.get('estimatedResults', {}).items():
                 if not isinstance(results, list):
@@ -370,32 +368,11 @@ def query(
 
                     htsget_found_donors[case_data['donor_id']] = 1
                     caseLevelData.append(case_data)
-
-            # Filter clinical results based on genomic results
-            donors = [d for d in donors if d['submitter_donor_id'] in htsget_found_donors]
-            allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in donors}
-            genomic_query = [c for c in caseLevelData if f"{c['program_id']}~{c['donor_id']}" in allowed_keys]
-
         except Exception as ex:
             logger.error(f"Error while reading HTSGet response: {ex}")
     elif genomic_data_types:
         # Genomic data types requested but no gene/chrom specified
-        mapped_types = get_mapped_genomic_types(genomic_data_types)
-        htsget_found_donors = {}
-        caseLevelData = []
-
         try:
-            # Get sample registration info
-            samplereg_req = requests.get(
-                f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000",
-                headers=headers
-            )
-            samplereg = safe_get_response_json(samplereg_req, 'Katsu sample registrations')
-            samplereg_mapping = {
-                s['submitter_sample_id']: (s['submitter_donor_id'], s['tumour_normal_designation'])
-                for s in samplereg['items']
-            }
-
             # Get all DRS objects (each representing a sample or experiment)
             objects_resp = requests.get(f"{config.DRS_URL}/ga4gh/drs/v1/objects", headers=headers)
             if not objects_resp.ok:
@@ -438,12 +415,14 @@ def query(
                 htsget_found_donors[case_data['donor_id']] = 1
                 caseLevelData.append(case_data)
 
-            # AND filter with clinical donors
-            donors = [d for d in donors if d['submitter_donor_id'] in htsget_found_donors]
-            allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in donors}
-            genomic_query = [c for c in caseLevelData if f"{c['program_id']}~{c['donor_id']}" in allowed_keys]
         except Exception as e:
             logger.error(f"Error while fetching genomic data types: {e}")
+
+    # AND filter with clinical donors
+    if len(htsget_found_donors) > 0:
+        donors = [d for d in donors if d['submitter_donor_id'] in htsget_found_donors]
+        allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in donors}
+        genomic_query = [c for c in caseLevelData if f"{c['program_id']}~{c['donor_id']}" in allowed_keys]
 
     summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
     return format_query_response(donors, genomic_query, summary_stats, page, page_size)
