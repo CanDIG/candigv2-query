@@ -354,9 +354,9 @@ def query(
                         case_data['variants'] = sample_info.get('variants', [])
                         case_data['reads'] = sample_info.get('reads', [])
 
-                        logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
-                        logger.warning(f"Requested data types: {mapped_types}")
-                        logger.warning(f"Sample info: {sample_info}")
+                        # logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
+                        # logger.warning(f"Requested data types: {mapped_types}")
+                        # logger.warning(f"Sample info: {sample_info}")
                         # OR filter: only include if any requested type exists
                         if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
                             continue
