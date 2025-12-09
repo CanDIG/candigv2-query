@@ -281,13 +281,16 @@ def query(
             # Do not forward the response from Katsu in case of compromising information (due to X-Service-Token)
             raise Exception(err_msg)
 
-    donors = [d for d in donors_req.json()['items'] if d['program_id'] not in exclude_programs]
+    katsu_donors = []
+    for d in donors_req.json()['items']:
+        if d['program_id'] not in exclude_programs:
+            katsu_donors.append(d)
 
     # Extract summary info
     summary_info = {}
     for header in ['submitter_sample_ids', 'primary_site', 'treatment_type']:
-        summary_info[header] = {donor['submitter_donor_id']: donor[header] for donor in donors}
-        for donor in donors:
+        summary_info[header] = {donor['submitter_donor_id']: donor[header] for donor in katsu_donors}
+        for donor in katsu_donors:
             del donor[header]
 
     # We need to be able to map sample registrations, so we'll grab it from Katsu
@@ -403,12 +406,12 @@ def query(
 
     # AND filter with clinical donors
     if htsget_found_donors is not None:
-        donors = [d for d in donors if d['submitter_donor_id'] in htsget_found_donors]
-        allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in donors}
+        katsu_donors = [d for d in katsu_donors if d['submitter_donor_id'] in htsget_found_donors]
+        allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in katsu_donors}
         genomic_query = [c for c in caseLevelData if f"{c['program_id']}~{c['donor_id']}" in allowed_keys]
 
-    summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
-    return format_query_response(donors, genomic_query, summary_stats, page, page_size)
+    summary_stats = get_summary_stats(katsu_donors, summary_info['primary_site'], summary_info['treatment_type'])
+    return format_query_response(katsu_donors, genomic_query, summary_stats, page, page_size)
 
 def is_discovery_allowed():
     if "X-Service-Token" in connexion.request.headers:
