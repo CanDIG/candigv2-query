@@ -235,7 +235,14 @@ GENOMIC_TYPE_MAP = {
 }
 
 def get_mapped_genomic_types(genomic_data_types):
-    return [GENOMIC_TYPE_MAP.get(dtype) for dtype in genomic_data_types if GENOMIC_TYPE_MAP.get(dtype)]
+    results = []
+    for dtype in genomic_data_types:
+        if GENOMIC_TYPE_MAP.get(dtype):
+            results.append(GENOMIC_TYPE_MAP.get(dtype))
+        if dtype in GENOMIC_TYPE_MAP.values():
+            results.append(dtype)
+    return results
+
 
 @app.route('/query')
 def query(
