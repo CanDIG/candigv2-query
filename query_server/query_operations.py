@@ -235,13 +235,23 @@ GENOMIC_TYPE_MAP = {
 }
 
 def get_mapped_genomic_types(genomic_data_types):
-    return [GENOMIC_TYPE_MAP.get(dtype) for dtype in genomic_data_types if GENOMIC_TYPE_MAP.get(dtype)]
+    results = []
+    if "any" in genomic_data_types:
+        results = list(GENOMIC_TYPE_MAP.values())
+    else:
+        for dtype in genomic_data_types:
+            if GENOMIC_TYPE_MAP.get(dtype):
+                results.append(GENOMIC_TYPE_MAP.get(dtype))
+            if dtype in GENOMIC_TYPE_MAP.values():
+                results.append(dtype)
+    return results
+
 
 @app.route('/query')
 def query(
     treatment="", primary_site="", drug_name="", systemic_therapy_type="",
     chrom="", gene="", page=0, page_size=10, assembly="hg38",
-    exclude_programs=[], genomic_data_types=[], session_id=""
+    exclude_programs=[], genomic_data_types=[], donors=[], session_id=""
 ):
     # NB: We're still doing table joins here, which is probably not where we want to do them
     # We're grabbing (and storing in memory) all the donor data in Katsu with the below request
@@ -281,13 +291,20 @@ def query(
             # Do not forward the response from Katsu in case of compromising information (due to X-Service-Token)
             raise Exception(err_msg)
 
-    donors = [d for d in donors_req.json()['items'] if d['program_id'] not in exclude_programs]
+    katsu_donors = []
+    for d in donors_req.json()['items']:
+        if d['program_id'] not in exclude_programs:
+            if len(donors) > 0:
+                if d['submitter_donor_id'] in donors:
+                    katsu_donors.append(d)
+            else:
+                katsu_donors.append(d)
 
     # Extract summary info
     summary_info = {}
     for header in ['submitter_sample_ids', 'primary_site', 'treatment_type']:
-        summary_info[header] = {donor['submitter_donor_id']: donor[header] for donor in donors}
-        for donor in donors:
+        summary_info[header] = {donor['submitter_donor_id']: donor[header] for donor in katsu_donors}
+        for donor in katsu_donors:
             del donor[header]
 
     # We need to be able to map sample registrations, so we'll grab it from Katsu
@@ -403,12 +420,12 @@ def query(
 
     # AND filter with clinical donors
     if htsget_found_donors is not None:
-        donors = [d for d in donors if d['submitter_donor_id'] in htsget_found_donors]
-        allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in donors}
+        katsu_donors = [d for d in katsu_donors if d['submitter_donor_id'] in htsget_found_donors]
+        allowed_keys = {f"{d['program_id']}~{d['submitter_donor_id']}" for d in katsu_donors}
         genomic_query = [c for c in caseLevelData if f"{c['program_id']}~{c['donor_id']}" in allowed_keys]
 
-    summary_stats = get_summary_stats(donors, summary_info['primary_site'], summary_info['treatment_type'])
-    return format_query_response(donors, genomic_query, summary_stats, page, page_size)
+    summary_stats = get_summary_stats(katsu_donors, summary_info['primary_site'], summary_info['treatment_type'])
+    return format_query_response(katsu_donors, genomic_query, summary_stats, page, page_size)
 
 def is_discovery_allowed():
     if "X-Service-Token" in connexion.request.headers:
