@@ -236,11 +236,14 @@ GENOMIC_TYPE_MAP = {
 
 def get_mapped_genomic_types(genomic_data_types):
     results = []
-    for dtype in genomic_data_types:
-        if GENOMIC_TYPE_MAP.get(dtype):
-            results.append(GENOMIC_TYPE_MAP.get(dtype))
-        if dtype in GENOMIC_TYPE_MAP.values():
-            results.append(dtype)
+    if "any" in genomic_data_types:
+        results = list(GENOMIC_TYPE_MAP.values())
+    else:
+        for dtype in genomic_data_types:
+            if GENOMIC_TYPE_MAP.get(dtype):
+                results.append(GENOMIC_TYPE_MAP.get(dtype))
+            if dtype in GENOMIC_TYPE_MAP.values():
+                results.append(dtype)
     return results
 
 

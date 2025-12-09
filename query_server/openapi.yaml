@@ -209,7 +209,7 @@ components:
             in: query
             name: genomic_data_types
             style: pipeDelimited
-            description: A list of genomic data types to include in the query
+            description: A list of genomic data types to include in the query. If value includes 'any', return any genomic data type.
             example: genomes|variants
             required: false
             schema:
