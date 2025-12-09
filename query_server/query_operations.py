@@ -241,7 +241,7 @@ def get_mapped_genomic_types(genomic_data_types):
 def query(
     treatment="", primary_site="", drug_name="", systemic_therapy_type="",
     chrom="", gene="", page=0, page_size=10, assembly="hg38",
-    exclude_programs=[], genomic_data_types=[], session_id=""
+    exclude_programs=[], genomic_data_types=[], donors=[], session_id=""
 ):
     # NB: We're still doing table joins here, which is probably not where we want to do them
     # We're grabbing (and storing in memory) all the donor data in Katsu with the below request
@@ -284,7 +284,11 @@ def query(
     katsu_donors = []
     for d in donors_req.json()['items']:
         if d['program_id'] not in exclude_programs:
-            katsu_donors.append(d)
+            if len(donors) > 0:
+                if d['submitter_donor_id'] in donors:
+                    katsu_donors.append(d)
+            else:
+                katsu_donors.append(d)
 
     # Extract summary info
     summary_info = {}

@@ -38,6 +38,7 @@ paths:
                 - $ref: "#/components/parameters/pageParam"
                 - $ref: "#/components/parameters/excludeProgramsParam"
                 - $ref: "#/components/parameters/genomicDataTypesParam"
+                - $ref: "#/components/parameters/donorsParam"
             operationId: query_operations.query
             responses:
                 200:
@@ -93,7 +94,7 @@ paths:
                 - $ref: "#/components/parameters/geneParam"
                 - $ref: "#/components/parameters/assemblyParam"
                 - $ref: "#/components/parameters/excludeProgramsParam"
-                - $ref: "#/components/parameters/genomicDataTypesParam" 
+                - $ref: "#/components/parameters/genomicDataTypesParam"
             responses:
                 200:
                     description: Summary statistics
@@ -210,6 +211,14 @@ components:
             style: pipeDelimited
             description: A list of genomic data types to include in the query
             example: genomes|variants
+            required: false
+            schema:
+                $ref: '#/components/schemas/Fields'
+        donorsParam:
+            in: query
+            name: donors
+            style: pipeDelimited
+            description: A list of submitter_donor_ids to include in the results
             required: false
             schema:
                 $ref: '#/components/schemas/Fields'
