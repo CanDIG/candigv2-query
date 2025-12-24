@@ -318,105 +318,106 @@ def query(
     # collect submitter_sample_ids we need:
     submitter_sample_ids = list(samplereg_mapping.keys())
 
-    # Get all DRS objects representing a sample or experiment
-    experiments_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/experiments", headers=headers, json={"submitter_sample_ids": submitter_sample_ids})
-    if not experiments_resp.ok:
-        raise Exception(f"Could not fetch DRS objects: {experiments_resp.status_code} {experiments_resp.text}")
-
-    experiments = {}
-    for experiment in experiments_resp.json():
-        experiments[experiment["experiment_id"]] = experiment
-
     # Prepare genomic data
     genomic_query = []
     mapped_types = get_mapped_genomic_types(genomic_data_types)
     htsget_found_donors = None
     caseLevelData = []
 
-    # Cross reference with HTSGet if gene or chrom is specified
-    if gene != "" or chrom != "" :
-        try:
-            htsget = query_htsget(headers, gene, assembly, chrom)
-            htsget_found_donors = {}
-            # genomic_query_info contains ALL matches from every dataset
-            # This is meant to be used to fill out the summary stats ONLY
-            # However, that part isn't covered in this PR (it's in DIG-1372 (https://candig.atlassian.net/browse/DIG-1372))
-            # and does not yet function
-            # genomic_query_info = htsget['query_info']
-            # for program in genomic_query_info:
-            #    sample_ids = genomic_query_info[program]
+    if gene != "" or chrom != "" or len(genomic_data_types) > 0:
+        # Get all DRS objects representing a sample or experiment
+        experiments_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/experiments", headers=headers, json={"submitter_sample_ids": submitter_sample_ids})
+        if not experiments_resp.ok:
+            raise Exception(f"Could not fetch DRS objects: {experiments_resp.status_code} {experiments_resp.text}")
 
-            for program, results in htsget.get('estimatedResults', {}).items():
-                if not isinstance(results, list):
-                    continue
-                for item in results:
-                    sample_id = item["submitter_sample_id"]
+        experiments = {}
+        for experiment in experiments_resp.json():
+            experiments[experiment["experiment_id"]] = experiment
+
+        # Cross reference with HTSGet if gene or chrom is specified
+        if gene != "" or chrom != "" :
+            try:
+                htsget = query_htsget(headers, gene, assembly, chrom)
+                htsget_found_donors = {}
+                # genomic_query_info contains ALL matches from every dataset
+                # This is meant to be used to fill out the summary stats ONLY
+                # However, that part isn't covered in this PR (it's in DIG-1372 (https://candig.atlassian.net/browse/DIG-1372))
+                # and does not yet function
+                # genomic_query_info = htsget['query_info']
+                # for program in genomic_query_info:
+                #    sample_ids = genomic_query_info[program]
+
+                for program, results in htsget.get('estimatedResults', {}).items():
+                    if not isinstance(results, list):
+                        continue
+                    for item in results:
+                        sample_id = item["submitter_sample_id"]
+                        case_data = {
+                            "program_id": program,
+                            "submitter_sample_id": sample_id,
+                            "variant_count": item.get("variant_count", 0)
+                        }
+
+                        if sample_id in samplereg_mapping:
+                            case_data['donor_id'], case_data['tumour_normal_designation'] = samplereg_mapping[sample_id]
+                        else:
+                            logger.error(f"Could not find donor mapping for {case_data}")
+                            case_data['donor_id'] = sample_id
+                            case_data['tumour_normal_designation'] = 'Tumour'
+
+                        try:
+                            sample_info = experiments[sample_id]
+                            case_data['genomes'] = sample_info.get('genomes', [])
+                            case_data['transcriptomes'] = sample_info.get('transcriptomes', [])
+                            case_data['variants'] = sample_info.get('variants', [])
+                            case_data['reads'] = sample_info.get('reads', [])
+
+                            # logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
+                            # logger.warning(f"Requested data types: {mapped_types}")
+                            # logger.warning(f"Sample info: {sample_info}")
+                            # OR filter: only include if any requested type exists
+                            if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
+                                continue
+                        except Exception as e:
+                            logger.warning(f"Error fetching genomic info for {sample_id}: {e}")
+                            continue
+
+                        htsget_found_donors[case_data['donor_id']] = 1
+                        caseLevelData.append(case_data)
+            except Exception as ex:
+                logger.error(f"Error while reading HTSGet response: {ex}")
+        else:
+            # Genomic data types requested but no gene/chrom specified
+            htsget_found_donors = {}
+
+            try:
+                for sample_id in experiments:
+                    sample_info = experiments[sample_id]
                     case_data = {
-                        "program_id": program,
+                        "program_id": sample_info.get("program", "unknown"),
                         "submitter_sample_id": sample_id,
-                        "variant_count": item.get("variant_count", 0)
+                        "variant_count": sample_info.get("variant_count", 0),
+                        "genomes": sample_info.get("genomes", []),
+                        "transcriptomes": sample_info.get("transcriptomes", []),
+                        "variants": sample_info.get("variants", []),
+                        "reads": sample_info.get("reads", []),
                     }
 
                     if sample_id in samplereg_mapping:
                         case_data['donor_id'], case_data['tumour_normal_designation'] = samplereg_mapping[sample_id]
                     else:
-                        logger.error(f"Could not find donor mapping for {case_data}")
                         case_data['donor_id'] = sample_id
                         case_data['tumour_normal_designation'] = 'Tumour'
 
-                    try:
-                        sample_info = experiments[sample_id]
-                        case_data['genomes'] = sample_info.get('genomes', [])
-                        case_data['transcriptomes'] = sample_info.get('transcriptomes', [])
-                        case_data['variants'] = sample_info.get('variants', [])
-                        case_data['reads'] = sample_info.get('reads', [])
-
-                        # logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
-                        # logger.warning(f"Requested data types: {mapped_types}")
-                        # logger.warning(f"Sample info: {sample_info}")
-                        # OR filter: only include if any requested type exists
-                        if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
-                            continue
-                    except Exception as e:
-                        logger.warning(f"Error fetching genomic info for {sample_id}: {e}")
+                    # Filter by mapped genomic data types (e.g., "variants")
+                    if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
                         continue
 
                     htsget_found_donors[case_data['donor_id']] = 1
                     caseLevelData.append(case_data)
-        except Exception as ex:
-            logger.error(f"Error while reading HTSGet response: {ex}")
-    elif genomic_data_types:
-        # Genomic data types requested but no gene/chrom specified
-        htsget_found_donors = {}
 
-        try:
-            for sample_id in experiments:
-                sample_info = experiments[sample_id]
-                case_data = {
-                    "program_id": sample_info.get("program", "unknown"),
-                    "submitter_sample_id": sample_id,
-                    "variant_count": sample_info.get("variant_count", 0),
-                    "genomes": sample_info.get("genomes", []),
-                    "transcriptomes": sample_info.get("transcriptomes", []),
-                    "variants": sample_info.get("variants", []),
-                    "reads": sample_info.get("reads", []),
-                }
-
-                if sample_id in samplereg_mapping:
-                    case_data['donor_id'], case_data['tumour_normal_designation'] = samplereg_mapping[sample_id]
-                else:
-                    case_data['donor_id'] = sample_id
-                    case_data['tumour_normal_designation'] = 'Tumour'
-
-                # Filter by mapped genomic data types (e.g., "variants")
-                if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
-                    continue
-
-                htsget_found_donors[case_data['donor_id']] = 1
-                caseLevelData.append(case_data)
-
-        except Exception as e:
-            logger.error(f"Error while fetching genomic data types: {e}")
+            except Exception as e:
+                logger.error(f"Error while fetching genomic data types: {e}")
 
     # AND filter with clinical donors
     if htsget_found_donors is not None:
@@ -585,17 +586,17 @@ def discovery_query(
             for sample_id in donor["submitter_sample_ids"]:
                 samplereg_mapping[sample_id] = donor
 
-    # Get all DRS objects representing a sample or experiment
-    experiments_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/experiments", headers=headers, json={})
-    if not experiments_resp.ok:
-        raise Exception(f"Could not fetch DRS objects: {experiments_resp.status_code} {experiments_resp.text}")
+    if gene != "" or chrom != "" or len(genomic_data_types) > 0:
+        # Get all DRS objects representing a sample or experiment
+        experiments_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/experiments", headers=headers, json={})
+        if not experiments_resp.ok:
+            raise Exception(f"Could not fetch DRS objects: {experiments_resp.status_code} {experiments_resp.text}")
 
-    experiments = {}
-    for experiment in experiments_resp.json():
-        experiments[experiment["experiment_id"]] = experiment
+        experiments = {}
+        for experiment in experiments_resp.json():
+            experiments[experiment["experiment_id"]] = experiment
 
-    try:
-        if gene!="" or chrom!="":
+        if gene != "" or chrom != "":
             htsget = query_htsget(headers, gene, assembly, chrom)
             htsget_found_donors = {}
 
@@ -616,7 +617,7 @@ def discovery_query(
                         donor = samplereg_mapping[submitter_sample_id]
                         donor_key = f"{donor['program_id']}~{donor['submitter_donor_id']}"
                         htsget_found_donors[donor_key] = 1
-        elif genomic_data_types:
+        else:
             # Genomic data types requested but no gene/chrom specified
             htsget_found_donors = {}
             for sample_id in experiments:
@@ -630,8 +631,6 @@ def discovery_query(
                     donor = samplereg_mapping[sample_id]
                     donor_key = f"{donor['program_id']}~{donor['submitter_donor_id']}"
                     htsget_found_donors[donor_key] = 1
-    except Exception as e:
-        logger.error(f"Error while querying HTSGet in discovery_query: {e}")
 
     if htsget_found_donors is not None:
         donors = [d for d in donors if f"{d['program_id']}~{d['submitter_donor_id']}" in htsget_found_donors]
