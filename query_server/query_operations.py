@@ -325,14 +325,14 @@ def query(
     caseLevelData = []
 
     if gene != "" or chrom != "" or len(genomic_data_types) > 0:
-        # Get all DRS objects representing a sample or experiment
-        experiments_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/experiments", headers=headers, json={"submitter_sample_ids": submitter_sample_ids})
-        if not experiments_resp.ok:
-            raise Exception(f"Could not fetch DRS objects: {experiments_resp.status_code} {experiments_resp.text}")
+        # Get all DRS objects representing a biosample
+        biosamples_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/biosamples", headers=headers, json={"submitter_sample_ids": submitter_sample_ids})
+        if not biosamples_resp.ok:
+            raise Exception(f"Could not fetch DRS objects: {biosamples_resp.status_code} {biosamples_resp.text}")
 
-        experiments = {}
-        for experiment in experiments_resp.json():
-            experiments[experiment["experiment_id"]] = experiment
+        biosamples = {}
+        for biosample in biosamples_resp.json():
+            biosamples[biosample["biosample_id"]] = biosample
 
         # Cross reference with HTSGet if gene or chrom is specified
         if gene != "" or chrom != "" :
@@ -366,11 +366,11 @@ def query(
                             case_data['tumour_normal_designation'] = 'Tumour'
 
                         try:
-                            sample_info = experiments[sample_id]
-                            case_data['genomes'] = sample_info.get('genomes', [])
-                            case_data['transcriptomes'] = sample_info.get('transcriptomes', [])
-                            case_data['variants'] = sample_info.get('variants', [])
-                            case_data['reads'] = sample_info.get('reads', [])
+                            sample_info = biosamples[sample_id]
+                            case_data['genomes'] = sample_info["experiments"]["wgs"]
+                            case_data['transcriptomes'] = sample_info["experiments"]["wts"]
+                            case_data['variants'] = sample_info["analyses"].get("sequence_variation", [])
+                            case_data['reads'] = sample_info["analyses"].get("reference_alignment", [])
 
                             # logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
                             # logger.warning(f"Requested data types: {mapped_types}")
@@ -391,16 +391,16 @@ def query(
             htsget_found_donors = {}
 
             try:
-                for sample_id in experiments:
-                    sample_info = experiments[sample_id]
+                for sample_id in biosamples:
+                    sample_info = biosamples[sample_id]
                     case_data = {
                         "program_id": sample_info.get("program", "unknown"),
                         "submitter_sample_id": sample_id,
                         "variant_count": sample_info.get("variant_count", 0),
-                        "genomes": sample_info.get("genomes", []),
-                        "transcriptomes": sample_info.get("transcriptomes", []),
-                        "variants": sample_info.get("variants", []),
-                        "reads": sample_info.get("reads", []),
+                        "genomes": sample_info["experiments"]["wgs"],
+                        "transcriptomes": sample_info["experiments"]["wts"],
+                        "variants": sample_info["analyses"].get("sequence_variation", []),
+                        "reads": sample_info["analyses"].get("reference_alignment", [])
                     }
 
                     if sample_id in samplereg_mapping:
@@ -587,14 +587,14 @@ def discovery_query(
                 samplereg_mapping[sample_id] = donor
 
     if gene != "" or chrom != "" or len(genomic_data_types) > 0:
-        # Get all DRS objects representing a sample or experiment
-        experiments_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/experiments", headers=headers, json={})
-        if not experiments_resp.ok:
-            raise Exception(f"Could not fetch DRS objects: {experiments_resp.status_code} {experiments_resp.text}")
+        # Get all DRS objects representing a biosample
+        biosamples_resp = requests.post(f"{config.DRS_URL}/ga4gh/drs/v1/biosamples", headers=headers, json={})
+        if not biosamples_resp.ok:
+            raise Exception(f"Could not fetch DRS objects: {biosamples_resp.status_code} {biosamples_resp.text}")
 
-        experiments = {}
-        for experiment in experiments_resp.json():
-            experiments[experiment["experiment_id"]] = experiment
+        biosamples = {}
+        for biosample in biosamples_resp.json():
+            biosamples[biosample["biosample_id"]] = biosample
 
         if gene != "" or chrom != "":
             htsget = query_htsget(headers, gene, assembly, chrom)
@@ -605,10 +605,17 @@ def discovery_query(
                     continue
                 for item in results:
                     submitter_sample_id = item["submitter_sample_id"]
-                    if submitter_sample_id in experiments:
-                        sample_info = experiments[submitter_sample_id]
+                    if submitter_sample_id in biosamples:
+                        sample_info = biosamples[submitter_sample_id]
+                        case_data = {
+                            "genomes": sample_info["experiments"]["wgs"],
+                            "transcriptomes": sample_info["experiments"]["wts"],
+                            "variants": sample_info["analyses"].get("sequence_variation", []),
+                            "reads": sample_info["analyses"].get("reference_alignment", [])
+                        }
+
                         # Skip donor if none of requested genomic types exist
-                        if mapped_types and not any(sample_info.get(dtype) for dtype in mapped_types):
+                        if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
                             continue
                     else:
                         continue
@@ -620,11 +627,17 @@ def discovery_query(
         else:
             # Genomic data types requested but no gene/chrom specified
             htsget_found_donors = {}
-            for sample_id in experiments:
-                sample_info = experiments[sample_id]
+            for sample_id in biosamples:
+                sample_info = biosamples[sample_id]
+                case_data = {
+                    "genomes": sample_info["experiments"]["wgs"],
+                    "transcriptomes": sample_info["experiments"]["wts"],
+                    "variants": sample_info["analyses"].get("sequence_variation", []),
+                    "reads": sample_info["analyses"].get("reference_alignment", [])
+                }
 
                 # Skip donor if none of requested genomic types exist
-                if mapped_types and not any(sample_info.get(dtype) for dtype in mapped_types):
+                if mapped_types and not any(case_data.get(dtype) for dtype in mapped_types):
                     continue
 
                 if sample_id in samplereg_mapping:
