@@ -5,7 +5,7 @@ connexion==3.1.0
 connexion[swagger-ui]
 connexion[flask]
 gunicorn>=23.0.0
-candigv2-authx@git+https://github.com/CanDIG/candigv2-authx.git@v2.8.6
+candigv2-authx@git+https://github.com/CanDIG/candigv2-authx.git@v2.9.0
 candigv2-logging@git+https://github.com/CanDIG/candigv2-logging.git@v1.0.3
 uvicorn[standard]==0.30.6
 werkzeug>=3.1.0 # not directly required, pinned by Snyk to avoid a vulnerability
