@@ -3,7 +3,7 @@ info:
     title: Query
     version: 1.2.0
 servers:
-    - url: /
+    - url: /query
 security:
     - {}
     - BasicAuth: []
