@@ -83,7 +83,7 @@ paths:
                     $ref: "#/components/responses/5xxServerError"
     /discovery/query:
         get:
-            summary: Retrieve summary statistics on the metadata for each program that match the given query parameters.
+            summary: Retrieve summary statistics
             description: Retrieve summary statistics on the metadata for each program that match the given query parameters.
             operationId: query_operations.discovery_query
             parameters:
@@ -122,7 +122,7 @@ paths:
                     $ref: "#/components/responses/5xxServerError"
     /whoami:
         get:
-            summary: Retrieve the user key (usually the email) for the currently logged-in user
+            summary: Retrieve the user key for the currently logged-in user
             description: Retrieve the user key (usually the email) for the currently logged-in user
             operationId: query_operations.whoami
             responses:
