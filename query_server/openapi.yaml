@@ -53,6 +53,30 @@ paths:
                     $ref: "#/components/responses/404NotFoundError"
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
+            x-codeSamples:
+              - lang: 'cURL'
+                label: 'cURL'
+                source: |
+                  curl -X POST "https://your-candig-domain/query/query" \
+                       -H "Authorization: Bearer ${CANDIG_TOKEN}" \
+                       -H "Content-Type: application/json" \
+                       -d '{"pageSize": 10}'
+              - lang: 'Python'
+                label: 'Python (Requests)'
+                source: |
+                  import requests
+                  import os
+        
+                  token = os.getenv("CANDIG_TOKEN")
+                  url = "https://your-candig-domain/query/query"
+                  
+                  headers = {
+                      "Authorization": f"Bearer {token}",
+                      "Content-Type": "application/json"
+                  }
+                  
+                  response = requests.post(url, json={"pageSize": 10}, headers=headers)
+                  print(response.json())
     /genomic_completeness:
         get:
             summary: Retrieve summary statistics on genomic data
