@@ -3,7 +3,7 @@ info:
     title: Query
     version: 1.2.0
 servers:
-    - url: /
+    - url: https://your-candig-domain/query
 security:
     - {}
     - BasicAuth: []
@@ -53,6 +53,30 @@ paths:
                     $ref: "#/components/responses/404NotFoundError"
                 5XX:
                     $ref: "#/components/responses/5xxServerError"
+            x-codeSamples:
+              - lang: 'cURL'
+                label: 'cURL'
+                source: |
+                  curl -X POST "https://your-candig-domain/query/query" \
+                       -H "Authorization: Bearer ${CANDIG_TOKEN}" \
+                       -H "Content-Type: application/json" \
+                       -d '{"pageSize": 10}'
+              - lang: 'Python'
+                label: 'Python (Requests)'
+                source: |
+                  import requests
+                  import os
+        
+                  token = os.getenv("CANDIG_TOKEN")
+                  url = "https://your-candig-domain/query/query"
+                  
+                  headers = {
+                      "Authorization": f"Bearer {token}",
+                      "Content-Type": "application/json"
+                  }
+                  
+                  response = requests.post(url, json={"pageSize": 10}, headers=headers)
+                  print(response.json())
     /genomic_completeness:
         get:
             summary: Retrieve summary statistics on genomic data
@@ -83,7 +107,7 @@ paths:
                     $ref: "#/components/responses/5xxServerError"
     /discovery/query:
         get:
-            summary: Retrieve summary statistics on the metadata for each program that match the given query parameters.
+            summary: Retrieve summary statistics
             description: Retrieve summary statistics on the metadata for each program that match the given query parameters.
             operationId: query_operations.discovery_query
             parameters:
@@ -122,7 +146,7 @@ paths:
                     $ref: "#/components/responses/5xxServerError"
     /whoami:
         get:
-            summary: Retrieve the user key (usually the email) for the currently logged-in user
+            summary: Retrieve the user key for the currently logged-in user
             description: Retrieve the user key (usually the email) for the currently logged-in user
             operationId: query_operations.whoami
             responses:
