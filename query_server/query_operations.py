@@ -300,23 +300,30 @@ def query(
             else:
                 katsu_donors.append(d)
 
-    # Extract summary info
+    # Build the sample -> (donor, tumour/normal) mapping directly from the donor
+    # query response. Each donor now carries per-sample registration detail
+    # (katsu PR #332), so we no longer need a separate, unfiltered call to
+    # /authorized/sample_registrations/ -- Katsu is only queried once.
+    samplereg_mapping = {}
+    for donor in katsu_donors:
+        for s in donor.get('sample_registrations') or []:
+            samplereg_mapping[s['submitter_sample_id']] = (
+                donor['submitter_donor_id'], s['tumour_normal_designation']
+            )
+    # Only the samples belonging to the donors Katsu returned. Passing these to
+    # DRS below limits its biosamples lookup to those samples.
+    submitter_sample_ids = list(samplereg_mapping.keys())
+
+    # Extract summary info (and strip these helper fields from the donor output)
     summary_info = {}
     for header in ['submitter_sample_ids', 'primary_site', 'treatment_type']:
         summary_info[header] = {donor['submitter_donor_id']: donor[header] for donor in katsu_donors}
         for donor in katsu_donors:
             del donor[header]
-
-    # We need to be able to map sample registrations, so we'll grab it from Katsu
-    samplereg_req = requests.get(
-        f"{config.KATSU_URL}/v3/authorized/sample_registrations/?page_size=10000000",
-        headers=headers
-    )
-    samplereg = safe_get_response_json(samplereg_req, 'Katsu sample registrations')
-    samplereg_mapping = {s['submitter_sample_id']: (s['submitter_donor_id'], s['tumour_normal_designation'])
-                        for s in samplereg['items']}
-    # collect submitter_sample_ids we need:
-    submitter_sample_ids = list(samplereg_mapping.keys())
+    # sample_registrations was only needed to build the mapping above; keep it out
+    # of the donor records we return
+    for donor in katsu_donors:
+        donor.pop('sample_registrations', None)
 
     # Prepare genomic data
     genomic_query = []
