@@ -378,6 +378,7 @@ def query(
                             case_data['transcriptomes'] = sample_info["experiments"]["wts"]
                             case_data['variants'] = sample_info["analyses"].get("sequence_variation", [])
                             case_data['reads'] = sample_info["analyses"].get("reference_alignment", [])
+                            case_data['annotations'] = sample_info["analyses"].get("sequence_annotation", [])
 
                             # logger.warning(f"Sample {sample_id} has data types: {', '.join([k for k in ['genomes', 'transcriptomes', 'variants', 'reads'] if case_data[k]])}")
                             # logger.warning(f"Requested data types: {mapped_types}")
@@ -407,7 +408,8 @@ def query(
                         "genomes": sample_info["experiments"]["wgs"],
                         "transcriptomes": sample_info["experiments"]["wts"],
                         "variants": sample_info["analyses"].get("sequence_variation", []),
-                        "reads": sample_info["analyses"].get("reference_alignment", [])
+                        "reads": sample_info["analyses"].get("reference_alignment", []),
+                        "annotations": sample_info["analyses"].get("sequence_annotation", [])
                     }
 
                     if sample_id in samplereg_mapping:
